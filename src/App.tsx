@@ -1,5 +1,6 @@
-import { useReducer } from 'react'
+import { useReducer, useState } from 'react'
 import Uploader from './components/Uploader'
+import BankReconciliation from './components/bank/BankReconciliation'
 import SheetConfig from './components/SheetConfig'
 import ReportTable from './components/ReportTable'
 import Stepper from './components/Stepper'
@@ -49,8 +50,21 @@ function reducer(state: AppState, action: Action): AppState {
   }
 }
 
+type AppMode = 'bases' | 'bank'
+
+const MODE_STORAGE_KEY = 'conciliador-bpo:modo'
+
+function readMode(): AppMode {
+  try {
+    return localStorage.getItem(MODE_STORAGE_KEY) === 'bank' ? 'bank' : 'bases'
+  } catch {
+    return 'bases'
+  }
+}
+
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState)
+  const [mode, setMode] = useState<AppMode>(readMode)
   const { entries, addEntry, removeEntry } = useFileHistory()
 
   const bothBasesParsed = state.base1 !== null && state.base2 !== null
@@ -62,6 +76,15 @@ export default function App() {
 
   function handleFileError(base: 'base1' | 'base2', message: string) {
     dispatch({ type: 'SET_ERROR', key: base, message })
+  }
+
+  function handleMode(next: AppMode) {
+    setMode(next)
+    try {
+      localStorage.setItem(MODE_STORAGE_KEY, next)
+    } catch {
+      /* navegador sem armazenamento: o modo vale só para esta aba */
+    }
   }
 
   function handleConfigured(config: ReconciliationConfig) {
@@ -82,11 +105,33 @@ export default function App() {
         </div>
         <div>
           <h1 className="text-sm font-bold text-gray-900 leading-tight">Conciliador BPO</h1>
-          <p className="text-xs text-gray-400">Conciliação de Bases Excel</p>
+          <p className="text-xs text-gray-400">
+            {mode === 'bank' ? 'Conciliação bancária: sistema × extrato' : 'Conciliação de Bases Excel'}
+          </p>
         </div>
+        <nav className="ml-auto flex rounded-lg bg-gray-100 p-1" aria-label="Tipo de conciliação">
+          {([['bases', 'Bases Excel'], ['bank', 'Bancária']] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => handleMode(value)}
+              aria-pressed={mode === value}
+              className={[
+                'px-3 py-1.5 text-xs font-semibold rounded-md transition-colors',
+                mode === value ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-800',
+              ].join(' ')}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
       </header>
 
-      <main className="max-w-5xl mx-auto px-6 py-10">
+      {/* Os dois modos ficam montados: trocar de aba não perde os arquivos carregados */}
+      <main hidden={mode !== 'bank'} className="max-w-7xl mx-auto px-6 py-10">
+        <BankReconciliation />
+      </main>
+
+      <main hidden={mode !== 'bases'} className="max-w-5xl mx-auto px-6 py-10">
         {/* Stepper: aparece em todas as etapas exceto upload */}
         {state.step !== 'upload' && <Stepper step={state.step} />}
 
