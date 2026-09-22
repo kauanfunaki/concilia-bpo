@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
 import ExcelJS from 'exceljs'
 import { buildAccountResults, summarizeAccount, updateRow } from './session'
 import { buildBankWorkbook, exportFileName } from './bankExporter'
@@ -7,6 +6,10 @@ import { defaultProfile, presetAccountsMissing, suggestAccount } from './account
 import type { Statement, SystemReport } from '../../types/bankReconciliation'
 
 const PERIOD = { start: '2026-09-15', end: '2026-09-15' }
+
+// PNG transparente de 1x1: o teste precisa de uma imagem válida, não da logo real. Ler a logo
+// do disco exigiria os tipos do Node, que o build do app não tem (o tsc do build checa os testes)
+const PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='), (c) => c.charCodeAt(0))
 
 const SYSTEM: SystemReport = {
   fileName: 'sistema.xlsx',
@@ -186,8 +189,7 @@ describe('buildBankWorkbook', () => {
   })
 
   it('embute a logo do perfil no canto esquerdo do cabeçalho, uma vez por arquivo', async () => {
-    // O Vitest roda na raiz do projeto
-    const logo = new Uint8Array(readFileSync('src/assets/logo-inovati.png'))
+    const logo = PNG
     const withLogo = { ...result, profile: { ...result.profile, logo: 'inovati' as const } }
     const other = { ...result, accountKey: 'OUTRA', profile: { ...result.profile, sheetName: 'SEM LOGO', logo: null } }
     const workbook = await buildBankWorkbook([withLogo, other], { inovati: logo })
@@ -202,13 +204,13 @@ describe('buildBankWorkbook', () => {
   })
 
   it('logo do banco no canto direito, junto da logo da empresa', async () => {
-    const png = new Uint8Array(readFileSync('src/assets/logo-inovati.png'))
+    const png = PNG
     const btg = { ...result, profile: { ...result.profile, logo: 'inovati' as const, bankLogo: 'btg' as const } }
     const caixa = { ...result, accountKey: 'CX', profile: { ...result.profile, sheetName: 'CAIXA', logo: 'inovati' as const, bankLogo: 'caixa' as const } }
     const workbook = await buildBankWorkbook([btg, caixa], {
       inovati: png,
-      btg: new Uint8Array(readFileSync('src/assets/logo-btg.png')),
-      caixa: new Uint8Array(readFileSync('src/assets/logo-caixa.png')),
+      btg: PNG,
+      caixa: PNG,
     })
     const reread = new ExcelJS.Workbook()
     await reread.xlsx.load(await workbook.xlsx.writeBuffer())
