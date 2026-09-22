@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { StatementFile } from './BankReconciliation'
 import { formatDateBR, formatMoney, parseDate, parseMoney } from '../../core/bankReconciliation/money'
 import { inPeriod, statementPeriodBalance, sumAmounts } from '../../core/bankReconciliation/statementBalance'
+import { isRedundantText } from '../../core/bankReconciliation/redundantRecords'
 import { FIELD_LABELS, isMappingUsable, parseStatementRows } from '../../core/bankReconciliation/statementSheet'
 import type { SheetLayout } from '../../core/bankReconciliation/statementSheet'
 import { cellText } from '../../core/bankReconciliation/text'
@@ -27,6 +28,7 @@ export default function StatementItem({ file, accounts, period, fallbackYear, on
   const [newAccountName, setNewAccountName] = useState<string | null>(null)
 
   const periodMovements = period ? statement.movements.filter((m) => inPeriod(m.date, period)) : statement.movements
+  const ignoredCount = periodMovements.filter((m) => m.ignored).length
   const balance = period ? statementPeriodBalance(statement, period) : null
   const total = sumAmounts(periodMovements)
   const statementCloses =
@@ -36,6 +38,12 @@ export default function StatementItem({ file, accounts, period, fallbackYear, on
 
   function updateMovements(movements: StatementMovement[]) {
     onUpdate({ statement: { ...statement, movements }, reviewed: false })
+  }
+
+  // Tirar ou devolver um redundante muda a conciliação, não a leitura: a conferência do PDF segue valendo
+  function toggleIgnored(id: string) {
+    const movements = statement.movements.map((m) => (m.id === id ? { ...m, ignored: !m.ignored } : m))
+    onUpdate({ statement: { ...statement, movements } })
   }
 
   function applyLayout(layout: SheetLayout) {
@@ -48,20 +56,21 @@ export default function StatementItem({ file, accounts, period, fallbackYear, on
   }
 
   return (
-    <div className={`rounded-xl border ${isPdf ? 'border-amber-200' : 'border-gray-200'} bg-white`}>
+    <div className={`rounded-xl border ${isPdf ? 'border-amber-200 dark:border-amber-500/30' : 'border-gray-200 dark:border-slate-700'} bg-white dark:bg-slate-900`}>
       {/* Cabeçalho */}
       <div className="flex flex-wrap items-center gap-3 p-4">
         <div
           className={`w-10 h-10 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
-            isPdf ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
+            isPdf ? 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400' : 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400'
           }`}
         >
           {isPdf ? 'PDF' : 'XLS'}
         </div>
         <div className="flex-1 min-w-[180px]">
-          <p className="text-sm font-semibold text-gray-800 truncate">{statement.fileName}</p>
-          <p className="text-xs text-gray-500">
+          <p className="text-sm font-semibold text-gray-800 dark:text-slate-200 truncate">{statement.fileName}</p>
+          <p className="text-xs text-gray-500 dark:text-slate-400">
             {periodMovements.length} movimento(s) no período · {statement.movements.length} no arquivo
+            {ignoredCount > 0 && ` · ${ignoredCount} redundante(s) fora da conciliação`}
             {balance && (
               <>
                 {' · '}saldo {fmt(balance.opening)} → {fmt(balance.closing)}
@@ -81,7 +90,7 @@ export default function StatementItem({ file, accounts, period, fallbackYear, on
               setNewAccountName(null)
               onUpdate({ accountKey: e.target.value || null, accountChosenByUser: true, accountReason: '' })
             }}
-            className={`px-3 py-1.5 text-sm border rounded-lg max-w-[280px] ${file.accountKey ? 'border-gray-300 text-gray-800' : 'border-red-300 text-red-700'}`}
+            className={`bg-white dark:bg-slate-900 px-3 py-1.5 text-sm border rounded-lg max-w-[280px] ${file.accountKey ? 'border-gray-300 dark:border-slate-600 text-gray-800 dark:text-slate-200' : 'border-red-300 dark:border-red-500/40 text-red-700 dark:text-red-400'}`}
           >
             <option value="">Conta no sistema…</option>
             {accounts.map((a) => (
@@ -91,7 +100,7 @@ export default function StatementItem({ file, accounts, period, fallbackYear, on
             ))}
             <option value={NEW_ACCOUNT}>+ Outra conta (sem lançamentos no sistema)</option>
           </select>
-          {file.accountReason && <span className="text-[11px] text-gray-400">{file.accountReason}</span>}
+          {file.accountReason && <span className="text-[11px] text-gray-400 dark:text-slate-500">{file.accountReason}</span>}
           {newAccountName !== null && (
             <div className="flex gap-1">
               <input
@@ -99,7 +108,7 @@ export default function StatementItem({ file, accounts, period, fallbackYear, on
                 value={newAccountName}
                 onChange={(e) => setNewAccountName(e.target.value)}
                 placeholder="Nome da conta"
-                className="px-2 py-1 text-xs border border-gray-300 rounded-md"
+                className="bg-white dark:bg-slate-900 px-2 py-1 text-xs border border-gray-300 dark:border-slate-600 rounded-md"
               />
               <button
                 disabled={!newAccountName.trim()}
@@ -115,7 +124,7 @@ export default function StatementItem({ file, accounts, period, fallbackYear, on
           )}
         </div>
 
-        <button onClick={onRemove} title="Remover extrato" className="px-2 py-1 text-xs text-gray-400 hover:text-red-500 rounded-md hover:bg-red-50">
+        <button onClick={onRemove} title="Remover extrato" className="px-2 py-1 text-xs text-gray-400 dark:text-slate-500 hover:text-red-500 rounded-md hover:bg-red-50 dark:hover:bg-red-500/15">
           ✕
         </button>
       </div>
@@ -123,17 +132,17 @@ export default function StatementItem({ file, accounts, period, fallbackYear, on
       {/* Avisos e conferência do extrato */}
       <div className="px-4 pb-3 space-y-2">
         {isPdf && (
-          <p className="text-xs text-amber-900 bg-amber-50 rounded-lg px-3 py-2">
+          <p className="text-xs text-amber-900 dark:text-amber-200 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-3 py-2">
             ⚠ Extrato lido de PDF: pode haver inconsistências de valor, sinal ou descrição. Confira as linhas abaixo com o PDF aberto.
           </p>
         )}
         {statement.warnings.map((w) => (
-          <p key={w} className="text-xs text-amber-800">
+          <p key={w} className="text-xs text-amber-800 dark:text-amber-300">
             ⚠ {w}
           </p>
         ))}
         {statementCloses !== null && (
-          <p className={`text-xs ${statementCloses ? 'text-emerald-700' : 'text-red-700 font-semibold'}`}>
+          <p className={`text-xs ${statementCloses ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400 font-semibold'}`}>
             {statementCloses
               ? `✓ Saldo inicial + movimentos do período = saldo final (${formatMoney(total)})`
               : `✗ Saldo inicial + movimentos (${formatMoney(total)}) não chega no saldo final — falta ou sobra linha, ou há valor/sinal trocado`}
@@ -141,11 +150,11 @@ export default function StatementItem({ file, accounts, period, fallbackYear, on
         )}
 
         <div className="flex flex-wrap gap-3">
-          <button onClick={() => setShowLines((v) => !v)} className="text-xs font-medium text-blue-700 hover:underline">
+          <button onClick={() => setShowLines((v) => !v)} className="text-xs font-medium text-blue-700 dark:text-blue-400 hover:underline">
             {showLines ? 'Ocultar linhas lidas' : `Ver linhas lidas (${periodMovements.length})`}
           </button>
           {file.sheets && (
-            <button onClick={() => setShowMapping((v) => !v)} className="text-xs font-medium text-blue-700 hover:underline">
+            <button onClick={() => setShowMapping((v) => !v)} className="text-xs font-medium text-blue-700 dark:text-blue-400 hover:underline">
               {showMapping ? 'Ocultar colunas' : 'Ajustar colunas'}
             </button>
           )}
@@ -163,11 +172,12 @@ export default function StatementItem({ file, accounts, period, fallbackYear, on
           editable={isPdf}
           fallbackYear={fallbackYear}
           onChange={updateMovements}
+          onToggleIgnored={toggleIgnored}
         />
       )}
 
       {isPdf && (
-        <label className="flex items-center gap-2 px-4 py-3 border-t border-amber-100 bg-amber-50/60 rounded-b-xl text-xs font-medium text-amber-900 cursor-pointer">
+        <label className="flex items-center gap-2 px-4 py-3 border-t border-amber-100 dark:border-amber-500/20 bg-amber-50/60 dark:bg-amber-500/10 rounded-b-xl text-xs font-medium text-amber-900 dark:text-amber-200 cursor-pointer">
           <input type="checkbox" checked={file.reviewed} onChange={(e) => onUpdate({ reviewed: e.target.checked })} />
           Conferi as linhas lidas do PDF com o extrato original
         </label>
@@ -178,7 +188,7 @@ export default function StatementItem({ file, accounts, period, fallbackYear, on
 
 // ── Mapeamento de colunas (planilha) ─────────────────────────────────────────
 
-const MAPPABLE_FIELDS: StatementField[] = ['date', 'description', 'counterparty', 'document', 'amount', 'credit', 'debit', 'direction', 'balance']
+const MAPPABLE_FIELDS: StatementField[] = ['date', 'description', 'counterparty', 'document', 'amount', 'credit', 'debit', 'direction', 'kind', 'balance']
 
 function ColumnMappingEditor({ file, onApply }: { file: StatementFile; onApply: (layout: SheetLayout) => void }) {
   const sheets = file.sheets ?? []
@@ -195,15 +205,15 @@ function ColumnMappingEditor({ file, onApply }: { file: StatementFile; onApply: 
   }
 
   return (
-    <div className="mx-4 mb-3 p-3 rounded-lg bg-gray-50 border border-gray-100">
+    <div className="mx-4 mb-3 p-3 rounded-lg bg-gray-50 dark:bg-slate-800/50 border border-gray-100 dark:border-slate-800">
       <div className="flex flex-wrap gap-3 mb-3">
         {sheets.length > 1 && (
-          <label className="text-xs text-gray-500">
+          <label className="text-xs text-gray-500 dark:text-slate-400">
             Aba
             <select
               value={sheet.sheetName}
               onChange={(e) => onApply({ ...layout, sheetName: e.target.value })}
-              className="mt-1 block px-2 py-1 text-xs border border-gray-300 rounded-md bg-white"
+              className="mt-1 block px-2 py-1 text-xs border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-900"
             >
               {sheets.map((s) => (
                 <option key={s.sheetName}>{s.sheetName}</option>
@@ -211,21 +221,21 @@ function ColumnMappingEditor({ file, onApply }: { file: StatementFile; onApply: 
             </select>
           </label>
         )}
-        <label className="text-xs text-gray-500">
+        <label className="text-xs text-gray-500 dark:text-slate-400">
           Linha do cabeçalho
           <input
             type="number"
             min={0}
             value={layout.headerRow + 1}
             onChange={(e) => onApply({ ...layout, headerRow: Math.max(-1, Number(e.target.value) - 1) })}
-            className="mt-1 block w-24 px-2 py-1 text-xs border border-gray-300 rounded-md bg-white"
+            className="mt-1 block w-24 px-2 py-1 text-xs border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-900"
           />
         </label>
-        <p className="text-[11px] text-gray-400 self-end">0 = planilha sem cabeçalho</p>
+        <p className="text-[11px] text-gray-400 dark:text-slate-500 self-end">0 = planilha sem cabeçalho</p>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
         {MAPPABLE_FIELDS.map((field) => (
-          <label key={field} className="text-xs text-gray-500">
+          <label key={field} className="text-xs text-gray-500 dark:text-slate-400">
             {FIELD_LABELS[field]}
             <select
               value={layout.mapping[field] ?? ''}
@@ -235,7 +245,7 @@ function ColumnMappingEditor({ file, onApply }: { file: StatementFile; onApply: 
                 else mapping[field] = Number(e.target.value)
                 onApply({ ...layout, mapping })
               }}
-              className="mt-1 block w-full px-2 py-1 text-xs border border-gray-300 rounded-md bg-white"
+              className="mt-1 block w-full px-2 py-1 text-xs border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-900"
             >
               <option value="">—</option>
               {Array.from({ length: width }, (_, i) => (
@@ -247,7 +257,7 @@ function ColumnMappingEditor({ file, onApply }: { file: StatementFile; onApply: 
           </label>
         ))}
       </div>
-      <p className="mt-2 text-[11px] text-gray-400">
+      <p className="mt-2 text-[11px] text-gray-400 dark:text-slate-500">
         Use "Valor (com sinal)" quando o banco traz uma coluna só; "Crédito" e "Débito" quando traz duas.
       </p>
     </div>
@@ -273,9 +283,10 @@ interface MovementsTableProps {
   editable: boolean
   fallbackYear: number
   onChange: (movements: StatementMovement[]) => void
+  onToggleIgnored: (id: string) => void
 }
 
-function MovementsTable({ movements, period, editable, fallbackYear, onChange }: MovementsTableProps) {
+function MovementsTable({ movements, period, editable, fallbackYear, onChange, onToggleIgnored }: MovementsTableProps) {
   const visible = period ? movements.filter((m) => inPeriod(m.date, period)) : movements
 
   function patch(id: string, change: Partial<StatementMovement>) {
@@ -301,10 +312,10 @@ function MovementsTable({ movements, period, editable, fallbackYear, onChange }:
   }
 
   return (
-    <div className="mx-4 mb-3 overflow-x-auto rounded-lg border border-gray-100">
+    <div className="mx-4 mb-3 overflow-x-auto rounded-lg border border-gray-100 dark:border-slate-800">
       <table className="min-w-full text-xs">
         <thead>
-          <tr className="bg-gray-50 text-gray-500 uppercase tracking-wide">
+          <tr className="bg-gray-50 dark:bg-slate-800/50 text-gray-500 dark:text-slate-400 uppercase tracking-wide">
             <th className="px-3 py-2 text-left font-semibold">Data</th>
             <th className="px-3 py-2 text-left font-semibold">Histórico</th>
             <th className="px-3 py-2 text-right font-semibold">Valor</th>
@@ -312,16 +323,16 @@ function MovementsTable({ movements, period, editable, fallbackYear, onChange }:
             {editable && <th className="px-3 py-2" />}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
           {visible.length === 0 && (
             <tr>
-              <td colSpan={editable ? 5 : 4} className="px-3 py-4 text-center text-gray-400">
+              <td colSpan={editable ? 5 : 4} className="px-3 py-4 text-center text-gray-400 dark:text-slate-500">
                 Nenhum movimento no período.
               </td>
             </tr>
           )}
           {visible.map((m) => (
-            <tr key={m.id} className={m.amount === 0 ? 'bg-red-50' : ''}>
+            <tr key={m.id} className={m.amount === 0 ? 'bg-red-50 dark:bg-red-500/10' : m.ignored ? 'opacity-60' : ''}>
               <td className="px-3 py-1.5 whitespace-nowrap">
                 {editable ? (
                   <input
@@ -331,24 +342,32 @@ function MovementsTable({ movements, period, editable, fallbackYear, onChange }:
                       if (date) patch(m.id, { date })
                       else e.target.value = formatDateBR(m.date)
                     }}
-                    className="w-24 px-1.5 py-0.5 border border-gray-200 rounded"
+                    className="bg-white dark:bg-slate-900 w-24 px-1.5 py-0.5 border border-gray-200 dark:border-slate-700 rounded"
                   />
                 ) : (
                   formatDateBR(m.date)
                 )}
               </td>
-              <td className="px-3 py-1.5 text-gray-700">
+              <td className="px-3 py-1.5 text-gray-700 dark:text-slate-300">
                 {editable ? (
                   <input
                     defaultValue={m.description}
                     onBlur={(e) => e.target.value !== m.description && patch(m.id, { description: e.target.value })}
-                    className="w-full min-w-[260px] px-1.5 py-0.5 border border-gray-200 rounded"
+                    className="bg-white dark:bg-slate-900 w-full min-w-[260px] px-1.5 py-0.5 border border-gray-200 dark:border-slate-700 rounded"
                   />
                 ) : (
-                  [m.description, m.counterparty].filter(Boolean).join(' · ')
+                  <span className={m.ignored ? 'line-through' : ''}>{[m.kind, m.description, m.counterparty].filter(Boolean).join(' · ')}</span>
+                )}
+                {(m.ignored || isRedundantText(m.description) || isRedundantText(m.kind ?? '')) && (
+                  <span className="ml-2 inline-flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-slate-400 whitespace-nowrap">
+                    {m.ignored ? 'Redundante, fora da conciliação ·' : 'Redundante, considerado ·'}
+                    <button onClick={() => onToggleIgnored(m.id)} className="font-medium text-blue-700 dark:text-blue-400 hover:underline">
+                      {m.ignored ? 'considerar mesmo assim' : 'ignorar'}
+                    </button>
+                  </span>
                 )}
               </td>
-              <td className={`px-3 py-1.5 text-right tabular-nums ${m.amount < 0 ? 'text-red-600' : 'text-gray-800'}`}>
+              <td className={`px-3 py-1.5 text-right tabular-nums ${m.amount < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-800 dark:text-slate-200'}`}>
                 {editable ? (
                   <input
                     defaultValue={m.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -357,19 +376,19 @@ function MovementsTable({ movements, period, editable, fallbackYear, onChange }:
                       if (amount !== null) patch(m.id, { amount })
                       else e.target.value = m.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
                     }}
-                    className="w-28 px-1.5 py-0.5 border border-gray-200 rounded text-right"
+                    className="bg-white dark:bg-slate-900 w-28 px-1.5 py-0.5 border border-gray-200 dark:border-slate-700 rounded text-right"
                   />
                 ) : (
                   formatMoney(m.amount)
                 )}
               </td>
-              <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmt(m.balance)}</td>
+              <td className="px-3 py-1.5 text-right tabular-nums text-gray-500 dark:text-slate-400">{fmt(m.balance)}</td>
               {editable && (
                 <td className="px-2 py-1.5 text-right">
                   <button
                     onClick={() => onChange(movements.filter((x) => x.id !== m.id))}
                     title="Excluir linha"
-                    className="text-gray-400 hover:text-red-500"
+                    className="text-gray-400 dark:text-slate-500 hover:text-red-500"
                   >
                     ✕
                   </button>
@@ -380,11 +399,11 @@ function MovementsTable({ movements, period, editable, fallbackYear, onChange }:
         </tbody>
       </table>
       {editable && (
-        <div className="px-3 py-2 bg-gray-50 flex items-center justify-between">
-          <button onClick={addLine} className="text-xs font-medium text-blue-700 hover:underline">
+        <div className="px-3 py-2 bg-gray-50 dark:bg-slate-800/50 flex items-center justify-between">
+          <button onClick={addLine} className="text-xs font-medium text-blue-700 dark:text-blue-400 hover:underline">
             + Incluir linha que faltou
           </button>
-          <span className="text-[11px] text-gray-400">Valor negativo = saída. Linha com valor zero é ignorada.</span>
+          <span className="text-[11px] text-gray-400 dark:text-slate-500">Valor negativo = saída. Linha com valor zero é ignorada.</span>
         </div>
       )}
     </div>

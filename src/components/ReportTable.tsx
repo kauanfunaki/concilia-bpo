@@ -16,9 +16,9 @@ interface ReportTableProps {
 }
 
 const STATUS_STYLE: Record<ReconciliationStatus, { row: string; dot: string }> = {
-  'De Acordo':         { row: 'bg-emerald-50 hover:bg-emerald-100', dot: 'bg-emerald-500' },
-  'Valor Divergente':  { row: 'bg-amber-50 hover:bg-amber-100',    dot: 'bg-amber-500'   },
-  'Nota não encontrada': { row: 'bg-red-50 hover:bg-red-100',      dot: 'bg-red-500'     },
+  'De Acordo':         { row: 'bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/25', dot: 'bg-emerald-500' },
+  'Valor Divergente':  { row: 'bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/25',    dot: 'bg-amber-500'   },
+  'Nota não encontrada': { row: 'bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/25',      dot: 'bg-red-500'     },
 }
 
 export default function ReportTable({ report, warnings, onNewConfig, onReset }: ReportTableProps) {
@@ -44,21 +44,21 @@ export default function ReportTable({ report, warnings, onNewConfig, onReset }: 
       {/* Cabeçalho */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Relatório de Conciliação</h2>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-slate-100">Relatório de Conciliação</h2>
+          <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
             {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(report.generatedAt)}
           </p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={onNewConfig}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors shadow-sm"
           >
             ← Alterar configuração
           </button>
           <button
             onClick={onReset}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors shadow-sm"
           >
             + Nova conciliação
           </button>
@@ -69,7 +69,7 @@ export default function ReportTable({ report, warnings, onNewConfig, onReset }: 
       {warnings.length > 0 && (
         <div className="mb-5 space-y-2">
           {warnings.map((w, i) => (
-            <div key={i} className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+            <div key={i} className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl text-sm text-amber-800 dark:text-amber-300">
               <span className="flex-shrink-0 mt-0.5">⚠</span>
               <span>{w}</span>
             </div>
@@ -83,72 +83,72 @@ export default function ReportTable({ report, warnings, onNewConfig, onReset }: 
           label="Total"
           value={summary.total}
           active={filter === 'Todos'}
-          colorClass="border-gray-200 bg-white"
+          colorClass="border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900"
           activeClass="ring-2 ring-blue-400"
-          textClass="text-gray-900"
+          textClass="text-gray-900 dark:text-slate-100"
           onClick={() => handleFilter('Todos')}
         />
         <MetricCard
           label="De Acordo"
           value={summary.deAcordo}
           active={filter === 'De Acordo'}
-          colorClass="border-emerald-200 bg-emerald-50"
+          colorClass="border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10"
           activeClass="ring-2 ring-emerald-500"
-          textClass="text-emerald-700"
+          textClass="text-emerald-700 dark:text-emerald-400"
           onClick={() => handleFilter('De Acordo')}
         />
         <MetricCard
           label="Divergente"
           value={summary.divergente}
           active={filter === 'Valor Divergente'}
-          colorClass="border-amber-200 bg-amber-50"
+          colorClass="border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10"
           activeClass="ring-2 ring-amber-500"
-          textClass="text-amber-700"
+          textClass="text-amber-700 dark:text-amber-300"
           onClick={() => handleFilter('Valor Divergente')}
         />
         <MetricCard
           label="Não encontrada"
           value={summary.naoEncontrada}
           active={filter === 'Nota não encontrada'}
-          colorClass="border-red-200 bg-red-50"
+          colorClass="border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10"
           activeClass="ring-2 ring-red-500"
-          textClass="text-red-700"
+          textClass="text-red-700 dark:text-red-400"
           onClick={() => handleFilter('Nota não encontrada')}
         />
       </div>
 
       {/* Tabela */}
       {filtered.length === 0 ? (
-        <div className="text-center py-16 bg-white border border-gray-200 rounded-xl">
-          <p className="text-gray-400 text-sm">Nenhum registro para o filtro selecionado.</p>
+        <div className="text-center py-16 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl">
+          <p className="text-gray-400 dark:text-slate-500 text-sm">Nenhum registro para o filtro selecionado.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm bg-white">
+        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm bg-white dark:bg-slate-900">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{report.visibleColumns[0]}</th>
-                <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Valor Base 2</th>
-                <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Valor Base 1</th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+              <tr className="bg-gray-50 dark:bg-slate-800/50 border-b border-gray-200 dark:border-slate-700">
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">{report.visibleColumns[0]}</th>
+                <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Valor Base 2</th>
+                <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Valor Base 1</th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Status</th>
                 {extraColumns.map((col) => (
-                  <th key={col} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  <th key={col} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
                     {formatColHeader(col)}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
               {paginated.map((rec, i) => (
                 <tr key={i} className={`transition-colors ${STATUS_STYLE[rec.status].row}`}>
-                  <td className="px-4 py-2.5 font-mono text-xs text-gray-800">{rec.keyValue || '—'}</td>
-                  <td className="px-4 py-2.5 text-right font-medium text-gray-800">{fmtVal(rec.valueBase2)}</td>
-                  <td className="px-4 py-2.5 text-right font-medium text-gray-800">{fmtVal(rec.valueBase1)}</td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-gray-800 dark:text-slate-200">{rec.keyValue || '—'}</td>
+                  <td className="px-4 py-2.5 text-right font-medium text-gray-800 dark:text-slate-200">{fmtVal(rec.valueBase2)}</td>
+                  <td className="px-4 py-2.5 text-right font-medium text-gray-800 dark:text-slate-200">{fmtVal(rec.valueBase1)}</td>
                   <td className="px-4 py-2.5">
                     <StatusBadge status={rec.status} />
                   </td>
                   {extraColumns.map((col) => (
-                    <td key={col} className="px-4 py-2.5 text-xs text-gray-600">
+                    <td key={col} className="px-4 py-2.5 text-xs text-gray-600 dark:text-slate-400">
                       {fmtCell(rec.displayFields[col])}
                     </td>
                   ))}
@@ -165,15 +165,15 @@ export default function ReportTable({ report, warnings, onNewConfig, onReset }: 
           <button
             disabled={page === 1}
             onClick={() => setPage((p) => p - 1)}
-            className="px-3 py-1.5 rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition-colors"
+            className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-slate-700 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
           >
             ← Anterior
           </button>
-          <span className="text-gray-500">Página {page} de {totalPages}</span>
+          <span className="text-gray-500 dark:text-slate-400">Página {page} de {totalPages}</span>
           <button
             disabled={page === totalPages}
             onClick={() => setPage((p) => p + 1)}
-            className="px-3 py-1.5 rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition-colors"
+            className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-slate-700 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
           >
             Próximo →
           </button>

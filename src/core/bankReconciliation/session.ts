@@ -52,7 +52,11 @@ export function buildAccountResults(
 
     const merged = mergeStatements(linked)
     // Linha incluída à mão e deixada com valor zero não é movimento
-    const movements = merged.movements.filter((m) => inPeriod(m.date, period) && m.amount !== 0)
+    const inPeriodMovements = merged.movements.filter((m) => inPeriod(m.date, period) && m.amount !== 0)
+    // Redundantes (aplicação/resgate da conta remunerada) saem do casamento, mas continuam no
+    // saldo do banco: o saldo corrido do extrato já os considera
+    const movements = inPeriodMovements.filter((m) => !m.ignored)
+    const ignored = inPeriodMovements.filter((m) => m.ignored)
     const entries = account.entries.filter((e) => inPeriod(e.date, period))
     const bank = statementPeriodBalance(merged, period)
 
@@ -79,7 +83,9 @@ export function buildAccountResults(
           bankOpening: bank.opening,
           bankClosing: bank.closing,
         },
-        statementTotal: sumAmounts(movements),
+        statementTotal: sumAmounts(inPeriodMovements),
+        ignoredCount: ignored.length,
+        ignoredTotal: sumAmounts(ignored),
       },
     })
   })
@@ -99,6 +105,8 @@ export interface AccountSummary {
   difference: number | null
   // Pendências do extrato − pendências do sistema: é o que precisa explicar a diferença
   explained: number
+  // Registros redundantes ignorados: também explicam diferença, se não se anularem no período
+  ignoredTotal: number
   closes: boolean | null
   // Saldo inicial do extrato + movimentos do período = saldo final do extrato
   statementCloses: boolean | null
@@ -128,7 +136,8 @@ export function summarizeAccount(result: AccountResult): AccountSummary {
     bankVariation,
     difference,
     explained,
-    closes: difference === null ? null : Math.abs(difference - explained) < 0.005,
+    ignoredTotal: result.ignoredTotal,
+    closes: difference === null ? null : Math.abs(difference - explained - result.ignoredTotal) < 0.005,
     statementCloses:
       bankOpening === null || bankClosing === null ? null : Math.abs(bankOpening + result.statementTotal - bankClosing) < 0.005,
   }

@@ -6,6 +6,7 @@ import type {
   StatementMovement,
 } from '../../types/bankReconciliation'
 import { parseDate, parseMoney, roundCents } from './money'
+import { isRedundantText } from './redundantRecords'
 import { cellText, normalizeText } from './text'
 
 export interface SheetRows {
@@ -29,6 +30,7 @@ export const FIELD_LABELS: Record<StatementField, string> = {
   credit: 'Crédito',
   debit: 'Débito',
   direction: 'Natureza (D/C)',
+  kind: 'Tipo da transação',
   balance: 'Saldo',
 }
 
@@ -63,7 +65,13 @@ const HEADER_PATTERNS: Record<StatementField, [RegExp, number][]> = {
   ],
   credit: [[/^(creditos?|entradas?|valor( do)? credito)( ?\(?r\$\)?)?$/, 5]],
   debit: [[/^(debitos?|saidas?|valor( do)? debito)( ?\(?r\$\)?)?$/, 5]],
-  direction: [[/^(d ?\/ ?c|c ?\/ ?d|natureza|deb ?\/ ?cred|cred ?\/ ?deb|tipo|sinal)$/, 4]],
+  // "Tipo" e "Natureza" são ambíguos: ora trazem D/C, ora o tipo da transação
+  // ("Depósito de PIX"). Entram fracos aqui e o conteúdo da coluna decide (refineByContent).
+  direction: [
+    [/^(d ?\/ ?c|c ?\/ ?d|deb ?\/ ?cred|cred ?\/ ?deb|debito ?\/ ?credito|credito ?\/ ?debito|sinal)$/, 5],
+    [/^(tipo|natureza)$/, 2],
+  ],
+  kind: [[/^(tipo( de)?( (transacao|lancamento|operacao|movimentacao|movimento))?|categoria|natureza da operacao)$/, 3]],
   balance: [
     [/^saldo( ?\(?r\$\)?| do dia| apos( o)? lancamento| final| atual)?$/, 5],
     [/^saldo\b/, 3],
@@ -71,6 +79,32 @@ const HEADER_PATTERNS: Record<StatementField, [RegExp, number][]> = {
 }
 
 const HEADER_SCAN_ROWS = 40
+const CONTENT_SAMPLE_ROWS = 200
+
+const DEBIT_TOKENS = new Set(['d', 'db', 'deb', 'debito', 'debit', 'dr', 'saida', 'saidas', '-'])
+const CREDIT_TOKENS = new Set(['c', 'cr', 'cred', 'credito', 'credit', 'entrada', 'entradas', '+'])
+
+function directionToken(value: unknown): string {
+  return normalizeText(cellText(value)).replace(/[\s.]/g, '')
+}
+
+/**
+ * Natureza do lançamento: −1 débito, +1 crédito, 0 quando o texto não é uma natureza.
+ * Só valor exato: "Depósito" começa com D e é crédito.
+ */
+export function parseDirection(value: unknown): -1 | 0 | 1 {
+  const token = directionToken(value)
+  if (DEBIT_TOKENS.has(token)) return -1
+  if (CREDIT_TOKENS.has(token)) return 1
+  return 0
+}
+
+function looksLikeDirection(values: unknown[]): boolean {
+  const filled = values.map(directionToken).filter(Boolean)
+  if (filled.length === 0) return false
+  const hits = filled.filter((t) => DEBIT_TOKENS.has(t) || CREDIT_TOKENS.has(t)).length
+  return hits / filled.length >= 0.9
+}
 
 function headerScore(text: string): { field: StatementField; weight: number }[] {
   const h = normalizeText(text).replace(/:$/, '')
@@ -105,6 +139,25 @@ function mapHeaderRow(cells: unknown[]): ColumnMapping {
   return mapping
 }
 
+/**
+ * Confere pelo conteúdo a coluna de natureza: se não tem D/C, é tipo da transação;
+ * se a coluna de tipo só tem D/C, é a natureza.
+ */
+function refineByContent(mapping: ColumnMapping, rows: unknown[][], headerRow: number): ColumnMapping {
+  const refined = { ...mapping }
+  const sample = (col: number) => rows.slice(headerRow + 1, headerRow + 1 + CONTENT_SAMPLE_ROWS).map((r) => r?.[col])
+
+  if (refined.direction !== undefined && !looksLikeDirection(sample(refined.direction))) {
+    if (refined.kind === undefined) refined.kind = refined.direction
+    delete refined.direction
+  }
+  if (refined.direction === undefined && refined.kind !== undefined && looksLikeDirection(sample(refined.kind))) {
+    refined.direction = refined.kind
+    delete refined.kind
+  }
+  return refined
+}
+
 export function isMappingUsable(mapping: ColumnMapping): boolean {
   const hasValue = mapping.amount !== undefined || mapping.credit !== undefined || mapping.debit !== undefined
   return mapping.date !== undefined && hasValue
@@ -120,7 +173,7 @@ export function detectLayout(sheet: SheetRows): SheetLayout | null {
     if (!isMappingUsable(mapping)) continue
     const count = Object.keys(mapping).length
     if (count > bestCount) {
-      best = { sheetName: sheet.sheetName, headerRow: r, mapping }
+      best = { sheetName: sheet.sheetName, headerRow: r, mapping: refineByContent(mapping, sheet.rows, r) }
       bestCount = count
     }
   }
@@ -146,23 +199,25 @@ export function parseStatementRows(
   const movements: StatementMovement[] = []
   const balances: StatementBalancePoint[] = []
   let order = 0
-  let ignored = 0
+  let skipped = 0
   let lastDate = ''
 
   for (let r = layout.headerRow + 1; r < rows.length; r++) {
     const row = rows[r] ?? []
     const description = cellText(at(row, 'description'))
     const counterparty = cellText(at(row, 'counterparty'))
+    const kind = cellText(at(row, 'kind'))
+    const label = description || counterparty || kind
     const balance = parseMoney(at(row, 'balance'))
     const date = parseDate(at(row, 'date'), fallbackYear)
 
     if (!date) {
       // "SALDO ANTERIOR" sem data no topo, "SALDO FINAL" sem data no rodapé
-      const undatedBalance = isBalanceLabel(description || counterparty) ? balance ?? parseMoney(at(row, 'amount')) : null
+      const undatedBalance = isBalanceLabel(label) ? balance ?? parseMoney(at(row, 'amount')) : null
       if (undatedBalance !== null) {
-        balances.push({ order: order++, date: lastDate, label: description || counterparty, balance: undatedBalance })
+        balances.push({ order: order++, date: lastDate, label, balance: undatedBalance })
       } else if (row.some((c) => cellText(c) !== '')) {
-        ignored++
+        skipped++
       }
       continue
     }
@@ -171,25 +226,23 @@ export function parseStatementRows(
     let amount: number | null
     if (mapping.amount !== undefined) {
       amount = parseMoney(at(row, 'amount'))
-      const nature = normalizeText(cellText(at(row, 'direction')))
-      if (amount !== null && nature) {
-        if (/^(d|-)/.test(nature)) amount = -Math.abs(amount)
-        else if (/^(c|\+)/.test(nature)) amount = Math.abs(amount)
-      }
+      const direction = parseDirection(at(row, 'direction'))
+      if (amount !== null && direction !== 0) amount = direction * Math.abs(amount)
     } else {
       const credit = parseMoney(at(row, 'credit'))
       const debit = parseMoney(at(row, 'debit'))
       amount = credit === null && debit === null ? null : roundCents(Math.abs(credit ?? 0) - Math.abs(debit ?? 0))
     }
 
-    const label = description || counterparty
     if (isBalanceLabel(label)) {
+      // Sem número na coluna de saldo (o "Saldo do dia" da QI Tech traz o valor em outra
+      // coluna), a linha só não vira ponto de saldo — e não conta como linha ignorada
       const value = balance ?? amount
       if (value !== null) balances.push({ order: order++, date, label, balance: value })
       continue
     }
     if (amount === null || amount === 0) {
-      ignored++
+      skipped++
       continue
     }
 
@@ -197,19 +250,46 @@ export function parseStatementRows(
       id: `L${r + 1}`,
       order: order++,
       date,
-      description,
+      description: description || kind,
       counterparty,
       document: cellText(at(row, 'document')),
       amount,
       balance,
+      ...(kind ? { kind } : {}),
+      // Procura em todas as células: o banco pode pôr o texto numa coluna que não foi mapeada
+      ...(row.some((c) => isRedundantText(cellText(c))) ? { ignored: true } : {}),
     })
   }
 
   const ordered = ensureChronological(movements, balances)
   const warnings: string[] = []
   if (ordered.reversed) warnings.push('O extrato estava do mais recente para o mais antigo; a ordem foi invertida.')
-  if (ignored > 0) warnings.push(`${ignored} linha(s) sem data ou sem valor foram ignoradas.`)
+  if (skipped > 0) warnings.push(`${skipped} linha(s) sem data ou sem valor foram ignoradas.`)
+  const conflicts = signConflicts(ordered.movements)
+  if (conflicts > 0) {
+    warnings.push(
+      `${conflicts} movimento(s) com sinal que não bate com o saldo do próprio extrato. ` +
+        'Confira em "Ajustar colunas" qual coluna é o valor e qual é a natureza (D/C).'
+    )
+  }
   return { movements: ordered.movements, balances: ordered.balances, warnings }
+}
+
+/**
+ * Movimentos cujo sinal contradiz o saldo corrido do extrato: o saldo anterior mais o valor
+ * não chega no saldo da linha, mas o saldo anterior menos o valor chega.
+ */
+export function signConflicts(movements: StatementMovement[]): number {
+  const sorted = [...movements].sort((a, b) => a.order - b.order)
+  let conflicts = 0
+  for (let i = 1; i < sorted.length; i++) {
+    const previous = sorted[i - 1].balance
+    const current = sorted[i].balance
+    if (previous === null || current === null) continue
+    const { amount } = sorted[i]
+    if (Math.abs(previous + amount - current) >= 0.005 && Math.abs(previous - amount - current) < 0.005) conflicts++
+  }
+  return conflicts
 }
 
 /**
@@ -221,10 +301,12 @@ export function ensureChronological(
   balances: StatementBalancePoint[]
 ): { movements: StatementMovement[]; balances: StatementBalancePoint[]; reversed: boolean } {
   const all = [...movements, ...balances].sort((a, b) => a.order - b.order)
-  if (all.length < 2) return { movements, balances, reversed: false }
+  // Saldo sem data (cabeçalho "Saldo em…", "SALDO ANTERIOR") não diz nada sobre a ordem
+  const dated = all.filter((item) => item.date)
+  if (dated.length < 2) return { movements, balances, reversed: false }
 
-  const first = all[0].date
-  const last = all[all.length - 1].date
+  const first = dated[0].date
+  const last = dated[dated.length - 1].date
   let reverse = first > last
   if (first === last) {
     reverse = runningBalanceHits([...movements].reverse()) > runningBalanceHits(movements)

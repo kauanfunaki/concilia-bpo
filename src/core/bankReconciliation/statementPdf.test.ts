@@ -121,3 +121,39 @@ describe('parseStatementPdfLines', () => {
     expect(parseStatementPdfLines(groupTextLines(items), 'x.pdf').movements).toHaveLength(1)
   })
 })
+
+describe('registros redundantes no PDF', () => {
+  it('aplicação e resgate da conta remunerada saem marcados como ignorados', () => {
+    const items = page([
+      [[40, '15/09/2026'], [100, 'PIX RECEBIDO DE CLIENTE'], [380, '100,00'], [460, '100,00']],
+      [[40, '15/09/2026'], [100, 'Aplicação Conta Remunerada'], [380, '-100,00'], [460, '0,00']],
+      [[40, '16/09/2026'], [100, 'Resgate Conta Remunerada'], [380, '100,00'], [460, '100,00']],
+    ])
+    const statement = parseStatementPdfLines(groupTextLines(items), 'x.pdf')
+    expect(statement.movements.map((m) => Boolean(m.ignored))).toEqual([false, true, true])
+  })
+})
+
+describe('extrato em PDF agrupado por dia, do mais recente para o mais antigo (QI Tech)', () => {
+  const items = page([
+    [[40, 'Saldo em 17/09/2026: R$ 1.493,10']],
+    [[40, '17/09/2026'], [380, 'Valor em R$']],
+    [[40, 'Saldo do dia'], [380, '1.493,10']],
+    [[40, 'Tarifa de PIX BANCO XYZ'], [380, '-6,90']],
+    [[40, 'Depósito CLIENTE UM S A'], [380, '1.000,00']],
+    [[40, '16/09/2026'], [380, 'Valor em R$']],
+    [[40, 'Saldo do dia'], [380, '500,00']],
+    [[40, 'Depósito de PIX CLIENTE DOIS'], [380, '500,00']],
+  ])
+  const statement = parseStatementPdfLines(groupTextLines(items), 'qi.pdf')
+
+  it('saldo sem data no topo não impede de perceber a ordem invertida', () => {
+    expect(statement.warnings.join()).toMatch(/invertida/)
+    expect(statement.movements.map((m) => m.description)).toEqual(['Depósito de PIX CLIENTE DOIS', 'Depósito CLIENTE UM S A', 'Tarifa de PIX BANCO XYZ'])
+  })
+
+  it('débito com sinal escrito: o valor sem sinal é crédito, sem alerta', () => {
+    expect(statement.movements.map((m) => m.amount)).toEqual([500, 1000, -6.9])
+    expect(statement.warnings.join()).not.toMatch(/sem sinal claro/)
+  })
+})

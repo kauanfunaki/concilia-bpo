@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
 import ExcelJS from 'exceljs'
 import { buildAccountResults, summarizeAccount, updateRow } from './session'
 import { buildBankWorkbook, exportFileName } from './bankExporter'
@@ -65,6 +66,18 @@ describe('perfis', () => {
     expect(defaultProfile({ key: 'BTG INOVATI LOGISTICA', name: 'BTG INOVATI LOGISTICA' }, true)).toMatchObject({ sheetName: 'INOVATI LOG', company: 'INOVATI LOGÍSTICA' })
   })
 
+  it('logo do banco: do perfil da Inovati ou pelo nome da conta', () => {
+    expect(defaultProfile({ key: 'CAIXA ECONOMICA', name: 'CAIXA ECONOMICA' }, true)).toMatchObject({ logo: 'inovati', bankLogo: 'caixa' })
+    expect(defaultProfile({ key: 'BTG INOVATI LOGISTICA', name: 'BTG INOVATI LOGISTICA' }, true)).toMatchObject({ logo: 'inovati', bankLogo: 'btg' })
+    expect(defaultProfile({ key: 'QI TECH', name: 'QI TECH' }, true)).toMatchObject({ bankLogo: 'qitech' })
+    // Outro cliente: sem a logo da Inovati, mas com a do banco
+    expect(defaultProfile({ key: 'BTG PACTUAL FILIAL SP', name: 'BTG PACTUAL FILIAL SP' }, false)).toMatchObject({ logo: null, bankLogo: 'btg' })
+    expect(defaultProfile({ key: 'CAIXA ECONOMICA FEDERAL', name: 'CAIXA ECONOMICA FEDERAL' }, false)).toMatchObject({ bankLogo: 'caixa' })
+    // "CAIXA" sozinho pode ser o caixa da empresa, não o banco
+    expect(defaultProfile({ key: 'CAIXA', name: 'CAIXA' }, false)).toMatchObject({ bankLogo: null })
+    expect(defaultProfile({ key: 'BANCO ALFA', name: 'BANCO ALFA' }, false)).toMatchObject({ bankLogo: null })
+  })
+
   it('oferece as contas do perfil que não vieram no relatório', () => {
     const accounts = [{ ...SYSTEM.accounts[0], key: 'BTG INOVATI LOGISTICA' }]
     expect(presetAccountsMissing(accounts).map((a) => a.key)).toEqual(['BTG MATRIZ', 'BTG MT', 'QI TECH', 'CAIXA'])
@@ -96,6 +109,35 @@ describe('buildAccountResults + summarizeAccount', () => {
     const edited = updateRow(result, result.rows[2].id, { situation: 'Lançamento conciliado', document: 'MANUAL' })
     expect(edited.rows[2]).toMatchObject({ situation: 'Lançamento conciliado', document: 'MANUAL', edited: true })
     expect(summarizeAccount(edited).closes).toBe(false)
+  })
+
+  it('registro redundante fica fora da conciliação, mas dentro do saldo do banco', () => {
+    const withSweep: Statement = {
+      ...STATEMENT,
+      movements: [
+        ...STATEMENT.movements.slice(0, 3),
+        { id: 'r1', order: 3.1, date: '2026-09-15', description: 'Aplicação Conta Remunerada', counterparty: '', document: '', amount: -90, balance: -210, ignored: true },
+        { id: 'r2', order: 3.2, date: '2026-09-15', description: 'Resgate Conta Remunerada', counterparty: '', document: '', amount: 90, balance: -120, ignored: true },
+      ],
+    }
+    const [swept] = buildAccountResults(SYSTEM, [], [{ statement: withSweep, accountKey: 'BANCO ALFA' }], PERIOD, {})
+    expect(swept.rows.map((r) => r.description)).not.toContain('Aplicação Conta Remunerada')
+    expect(swept.rows).toHaveLength(4)
+    expect(swept).toMatchObject({ ignoredCount: 2, ignoredTotal: 0, statementTotal: -130 })
+    expect(summarizeAccount(swept).closes).toBe(true)
+  })
+
+  it('redundantes que não se anulam no período também explicam a diferença', () => {
+    const onlyApplication: Statement = {
+      ...STATEMENT,
+      movements: [
+        ...STATEMENT.movements.slice(0, 3),
+        { id: 'r1', order: 3.1, date: '2026-09-15', description: 'Aplicação Conta Remunerada', counterparty: '', document: '', amount: -90, balance: -210, ignored: true },
+      ],
+    }
+    const [swept] = buildAccountResults(SYSTEM, [], [{ statement: onlyApplication, accountKey: 'BANCO ALFA' }], PERIOD, {})
+    expect(swept.balances.bankClosing).toBe(-210)
+    expect(summarizeAccount(swept)).toMatchObject({ difference: -70, explained: 20, ignoredTotal: -90, closes: true })
   })
 
   it('preferência salva sobrepõe o perfil padrão', () => {
@@ -138,8 +180,50 @@ describe('buildBankWorkbook', () => {
     expect(ws.getCell('I2').value).toBe('SALDO')
     expect([ws.getCell('I4').value, ws.getCell('J5').value, ws.getCell('J6').value]).toEqual(['Atua', -1000, -1150])
     expect([ws.getCell('I8').value, ws.getCell('J9').value, ws.getCell('J10').value]).toEqual(['Alfa', 10, -120])
-    expect(ws.getCell('J15').value).toMatchObject({ formula: 'J14-J13', result: 20 })
+    // A conferência é interna: a planilha que vai para o cliente não traz o bloco
+    expect(['I12', 'I13', 'I14', 'I15', 'J13', 'J14', 'J15'].map((a) => ws.getCell(a).value)).toEqual([null, null, null, null, null, null, null])
     expect(ws.getCell('E5').dataValidation).toMatchObject({ type: 'list', formulae: ['Config!$B$5:$B$9'] })
+  })
+
+  it('embute a logo do perfil no canto esquerdo do cabeçalho, uma vez por arquivo', async () => {
+    // O Vitest roda na raiz do projeto
+    const logo = new Uint8Array(readFileSync('src/assets/logo-inovati.png'))
+    const withLogo = { ...result, profile: { ...result.profile, logo: 'inovati' as const } }
+    const other = { ...result, accountKey: 'OUTRA', profile: { ...result.profile, sheetName: 'SEM LOGO', logo: null } }
+    const workbook = await buildBankWorkbook([withLogo, other], { inovati: logo })
+    const reread = new ExcelJS.Workbook()
+    await reread.xlsx.load(await workbook.xlsx.writeBuffer())
+
+    expect(reread.model.media).toHaveLength(1)
+    const images = reread.getWorksheet('ALFA')!.getImages()
+    expect(images).toHaveLength(1)
+    expect(images[0].range.tl).toMatchObject({ nativeCol: 1, nativeRow: 1 })
+    expect(reread.getWorksheet('SEM LOGO')!.getImages()).toHaveLength(0)
+  })
+
+  it('logo do banco no canto direito, junto da logo da empresa', async () => {
+    const png = new Uint8Array(readFileSync('src/assets/logo-inovati.png'))
+    const btg = { ...result, profile: { ...result.profile, logo: 'inovati' as const, bankLogo: 'btg' as const } }
+    const caixa = { ...result, accountKey: 'CX', profile: { ...result.profile, sheetName: 'CAIXA', logo: 'inovati' as const, bankLogo: 'caixa' as const } }
+    const workbook = await buildBankWorkbook([btg, caixa], {
+      inovati: png,
+      btg: new Uint8Array(readFileSync('src/assets/logo-btg.png')),
+      caixa: new Uint8Array(readFileSync('src/assets/logo-caixa.png')),
+    })
+    const reread = new ExcelJS.Workbook()
+    await reread.xlsx.load(await workbook.xlsx.writeBuffer())
+
+    expect(reread.model.media).toHaveLength(3)
+    const anchors = (sheet: string) =>
+      reread.getWorksheet(sheet)!.getImages().map((i) => [i.range.tl.nativeCol, i.range.tl.nativeRow]).sort()
+    expect(anchors('ALFA')).toEqual([[1, 1], [5, 1]])
+    expect(anchors('CAIXA')).toEqual([[1, 1], [5, 0]])
+  })
+
+  it('sem o arquivo da logo, a planilha sai sem ela', async () => {
+    const withLogo = { ...result, profile: { ...result.profile, logo: 'inovati' as const } }
+    const workbook = await buildBankWorkbook([withLogo])
+    expect(workbook.getWorksheet('ALFA')!.getImages()).toHaveLength(0)
   })
 
   it('nome de arquivo por banco e geral', () => {

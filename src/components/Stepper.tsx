@@ -29,15 +29,15 @@ export default function Stepper({ step }: { step: AppStep }) {
                 className={[
                   'w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-200',
                   done ? 'bg-blue-600 text-white' :
-                  active ? 'bg-blue-600 text-white ring-4 ring-blue-100' :
-                  'bg-gray-100 text-gray-400',
+                  active ? 'bg-blue-600 text-white ring-4 ring-blue-100 dark:ring-blue-500/30' :
+                  'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-500',
                 ].join(' ')}
               >
                 {done ? '✓' : i + 1}
               </div>
               <span className={[
                 'mt-2 text-xs font-semibold',
-                done || active ? 'text-blue-600' : 'text-gray-400',
+                done || active ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-slate-500',
               ].join(' ')}>
                 {s.label}
               </span>
@@ -45,7 +45,7 @@ export default function Stepper({ step }: { step: AppStep }) {
             {i < STEPS.length - 1 && (
               <div className={[
                 'w-28 h-0.5 mt-4 mx-1 transition-colors duration-200',
-                current > i ? 'bg-blue-600' : 'bg-gray-200',
+                current > i ? 'bg-blue-600' : 'bg-gray-200 dark:bg-slate-700',
               ].join(' ')} />
             )}
           </div>

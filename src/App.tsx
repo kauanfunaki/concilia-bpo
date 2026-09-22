@@ -1,6 +1,7 @@
 import { useReducer, useState } from 'react'
 import Uploader from './components/Uploader'
 import BankReconciliation from './components/bank/BankReconciliation'
+import ThemeToggle from './components/ThemeToggle'
 import SheetConfig from './components/SheetConfig'
 import ReportTable from './components/ReportTable'
 import Stepper from './components/Stepper'
@@ -95,21 +96,21 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-3 shadow-sm">
+      <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 px-6 py-3 flex items-center gap-3 shadow-sm">
         <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
           <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-6a2 2 0 012-2h2a2 2 0 012 2v6m-8 0H5a2 2 0 01-2-2V7a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-2" />
           </svg>
         </div>
         <div>
-          <h1 className="text-sm font-bold text-gray-900 leading-tight">Conciliador BPO</h1>
-          <p className="text-xs text-gray-400">
+          <h1 className="text-sm font-bold text-gray-900 dark:text-slate-100 leading-tight">Conciliador BPO</h1>
+          <p className="text-xs text-gray-400 dark:text-slate-500">
             {mode === 'bank' ? 'Conciliação bancária: sistema × extrato' : 'Conciliação de Bases Excel'}
           </p>
         </div>
-        <nav className="ml-auto flex rounded-lg bg-gray-100 p-1" aria-label="Tipo de conciliação">
+        <nav className="ml-auto flex rounded-lg bg-gray-100 dark:bg-slate-800 p-1" aria-label="Tipo de conciliação">
           {([['bases', 'Bases Excel'], ['bank', 'Bancária']] as const).map(([value, label]) => (
             <button
               key={value}
@@ -117,13 +118,14 @@ export default function App() {
               aria-pressed={mode === value}
               className={[
                 'px-3 py-1.5 text-xs font-semibold rounded-md transition-colors',
-                mode === value ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-800',
+                mode === value ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 shadow-sm' : 'text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-100',
               ].join(' ')}
             >
               {label}
             </button>
           ))}
         </nav>
+        <ThemeToggle />
       </header>
 
       {/* Os dois modos ficam montados: trocar de aba não perde os arquivos carregados */}
@@ -161,7 +163,7 @@ export default function App() {
           <div className="flex items-center justify-center py-24">
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto mb-4" />
-              <p className="text-gray-600 font-medium">Processando conciliação...</p>
+              <p className="text-gray-600 dark:text-slate-400 font-medium">Processando conciliação...</p>
             </div>
           </div>
         )}
