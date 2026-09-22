@@ -78,8 +78,8 @@ export default function SheetConfig({ base1, base2, onConfigured, onBack }: Shee
     <div className="max-w-4xl mx-auto">
       {/* Título */}
       <div className="mb-7">
-        <h2 className="text-xl font-bold text-gray-900">Configurar Conciliação</h2>
-        <p className="mt-0.5 text-sm text-gray-500">Selecione as abas, os campos-chave e as colunas de valor de cada base.</p>
+        <h2 className="text-xl font-bold text-gray-900 dark:text-slate-100">Configurar Conciliação</h2>
+        <p className="mt-0.5 text-sm text-gray-500 dark:text-slate-400">Selecione as abas, os campos-chave e as colunas de valor de cada base.</p>
       </div>
 
       {/* Painéis das bases */}
@@ -111,32 +111,32 @@ export default function SheetConfig({ base1, base2, onConfigured, onBack }: Shee
       </div>
 
       {/* Tolerância de valor */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-6">
+      <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-sm p-5 mb-6">
         <div className="flex items-start gap-4">
-          <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <div className="w-9 h-9 rounded-lg bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg className="w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
             </svg>
           </div>
           <div className="flex-1">
-            <label className="block text-sm font-semibold text-gray-800 mb-0.5">Tolerância de valor</label>
-            <p className="text-xs text-gray-500 mb-3">
+            <label className="block text-sm font-semibold text-gray-800 dark:text-slate-200 mb-0.5">Tolerância de valor</label>
+            <p className="text-xs text-gray-500 dark:text-slate-400 mb-3">
               Diferença máxima aceita entre os valores para considerar "De Acordo".
               Use <strong>0</strong> para correspondência exata.
             </p>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500 font-medium">R$</span>
+              <span className="text-sm text-gray-500 dark:text-slate-400 font-medium">R$</span>
               <input
                 type="number"
                 min={0}
                 step={0.01}
                 value={tolerance}
                 onChange={(e) => setTolerance(Math.max(0, parseFloat(e.target.value) || 0))}
-                className="w-36 border border-gray-300 rounded-lg text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                className="bg-white dark:bg-slate-900 w-36 border border-gray-300 dark:border-slate-600 rounded-lg text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
                 placeholder="0,00"
               />
               {tolerance > 0 && (
-                <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-full">
+                <span className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 px-2 py-1 rounded-full">
                   ±{tolerance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </span>
               )}
@@ -149,7 +149,7 @@ export default function SheetConfig({ base1, base2, onConfigured, onBack }: Shee
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
-          className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 transition-colors"
+          className="text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 flex items-center gap-1 transition-colors"
         >
           ← Mudar arquivos
         </button>
@@ -186,7 +186,7 @@ function BasePanel({
   label, sublabel, color, file, state, colError,
   onSheetChange, onKeyFieldChange, onValueChange, onToggleDisplay,
 }: BasePanelProps) {
-  const badge = color === 'blue' ? 'bg-blue-100 text-blue-700' : 'bg-violet-100 text-violet-700'
+  const badge = color === 'blue' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400' : 'bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300'
   const ring = color === 'blue' ? 'focus:ring-blue-400' : 'focus:ring-violet-400'
 
   const displayHeaders = state.headers.filter(
@@ -194,12 +194,12 @@ function BasePanel({
   )
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+    <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-sm p-5">
       {/* Header */}
       <div className="flex items-center gap-2 mb-4">
         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${badge}`}>{label}</span>
-        <span className="text-xs text-gray-400">{sublabel}</span>
-        <span className="text-xs text-gray-400 ml-auto truncate max-w-[120px]" title={file.name}>{file.name}</span>
+        <span className="text-xs text-gray-400 dark:text-slate-500">{sublabel}</span>
+        <span className="text-xs text-gray-400 dark:text-slate-500 ml-auto truncate max-w-[120px]" title={file.name}>{file.name}</span>
       </div>
 
       <div className="space-y-3">
@@ -208,11 +208,11 @@ function BasePanel({
           <select
             value={state.sheet}
             onChange={(e) => onSheetChange(e.target.value)}
-            className={`w-full border border-gray-300 rounded-lg text-sm px-3 py-1.5 focus:outline-none focus:ring-2 ${ring} focus:border-transparent`}
+            className={`bg-white dark:bg-slate-900 w-full border border-gray-300 dark:border-slate-600 rounded-lg text-sm px-3 py-1.5 focus:outline-none focus:ring-2 ${ring} focus:border-transparent`}
           >
             {file.sheets.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
-          {state.error && <p className="text-xs text-red-600 mt-1">{state.error}</p>}
+          {state.error && <p className="text-xs text-red-600 dark:text-red-400 mt-1">{state.error}</p>}
         </Field>
 
         {/* Campo-chave */}
@@ -220,7 +220,7 @@ function BasePanel({
           <select
             value={state.keyField}
             onChange={(e) => onKeyFieldChange(e.target.value)}
-            className={`w-full border border-gray-300 rounded-lg text-sm px-3 py-1.5 focus:outline-none focus:ring-2 ${ring} focus:border-transparent`}
+            className={`bg-white dark:bg-slate-900 w-full border border-gray-300 dark:border-slate-600 rounded-lg text-sm px-3 py-1.5 focus:outline-none focus:ring-2 ${ring} focus:border-transparent`}
           >
             <option value="">— Selecione —</option>
             {state.headers.map((h) => <option key={h} value={h}>{h}</option>)}
@@ -232,21 +232,21 @@ function BasePanel({
           <select
             value={state.valueColumn}
             onChange={(e) => onValueChange(e.target.value)}
-            className={`w-full border border-gray-300 rounded-lg text-sm px-3 py-1.5 focus:outline-none focus:ring-2 ${ring} focus:border-transparent`}
+            className={`bg-white dark:bg-slate-900 w-full border border-gray-300 dark:border-slate-600 rounded-lg text-sm px-3 py-1.5 focus:outline-none focus:ring-2 ${ring} focus:border-transparent`}
           >
             <option value="">— Selecione —</option>
             {state.headers.map((h) => <option key={h} value={h}>{h}</option>)}
           </select>
         </Field>
 
-        {colError && <p className="text-xs text-red-600">{colError}</p>}
+        {colError && <p className="text-xs text-red-600 dark:text-red-400">{colError}</p>}
 
         {/* Campos adicionais */}
         {displayHeaders.length > 0 && (
           <Field label="Campos adicionais no relatório">
-            <div className="space-y-1 max-h-28 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-gray-50">
+            <div className="space-y-1 max-h-28 overflow-y-auto border border-gray-200 dark:border-slate-700 rounded-lg p-2 bg-gray-50 dark:bg-slate-800/50">
               {displayHeaders.map((h) => (
-                <label key={h} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer select-none">
+                <label key={h} className="flex items-center gap-2 text-xs text-gray-700 dark:text-slate-300 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={state.selectedDisplayFields.includes(h)}
@@ -267,7 +267,7 @@ function BasePanel({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
+      <label className="block text-xs font-semibold text-gray-600 dark:text-slate-400 mb-1">{label}</label>
       {children}
     </div>
   )

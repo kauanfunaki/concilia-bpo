@@ -41,19 +41,19 @@ export default function BankFilesStep(props: BankFilesStepProps) {
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-8 text-center">
-        <h2 className="text-2xl font-bold text-gray-900">Conciliação bancária</h2>
-        <p className="mt-1 text-gray-500 text-sm">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Conciliação bancária</h2>
+        <p className="mt-1 text-gray-500 dark:text-slate-400 text-sm">
           Relatório de caixa do sistema do cliente × extratos dos bancos, com o relatório no modelo da planilha de conciliação.
         </p>
       </div>
 
       {/* ── Relatório do sistema ───────────────────────────────────────────── */}
-      <section className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-5">
+      <section className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-sm p-5 mb-5">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">1</span>
-          <h3 className="text-sm font-bold text-gray-900">Relatório do sistema (Atua)</h3>
+          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400">1</span>
+          <h3 className="text-sm font-bold text-gray-900 dark:text-slate-100">Relatório do sistema (Atua)</h3>
         </div>
-        <p className="text-xs text-gray-500 mb-4">"Rel. Caixa Financeiro" exportado do Atua, com todas as contas do dia.</p>
+        <p className="text-xs text-gray-500 dark:text-slate-400 mb-4">"Rel. Caixa Financeiro" exportado do Atua, com todas as contas do dia.</p>
 
         {props.systemLoading ? (
           <Spinner label="Lendo relatório..." />
@@ -61,13 +61,13 @@ export default function BankFilesStep(props: BankFilesStepProps) {
           <div>
             <div className="flex items-center justify-between mb-3">
               <div>
-                <p className="text-sm font-semibold text-gray-800">{system.fileName}</p>
-                <p className="text-xs text-gray-500">
+                <p className="text-sm font-semibold text-gray-800 dark:text-slate-200">{system.fileName}</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400">
                   {system.accounts.length} conta(s)
                   {system.period && ` · ${formatPeriod(system.period)}`}
                 </p>
               </div>
-              <label className="text-xs text-gray-400 underline hover:text-gray-600 cursor-pointer">
+              <label className="text-xs text-gray-400 dark:text-slate-500 underline hover:text-gray-600 dark:hover:text-slate-300 cursor-pointer">
                 Trocar arquivo
                 <input
                   type="file"
@@ -81,23 +81,23 @@ export default function BankFilesStep(props: BankFilesStepProps) {
                 />
               </label>
             </div>
-            <div className="overflow-x-auto rounded-lg border border-gray-100">
+            <div className="overflow-x-auto rounded-lg border border-gray-100 dark:border-slate-800">
               <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+                  <tr className="bg-gray-50 dark:bg-slate-800/50 text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wide">
                     <th className="px-3 py-2 text-left font-semibold">Conta</th>
                     <th className="px-3 py-2 text-right font-semibold">Lançamentos</th>
                     <th className="px-3 py-2 text-right font-semibold">Saldo inicial</th>
                     <th className="px-3 py-2 text-right font-semibold">Saldo final</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
                   {system.accounts.map((a) => (
                     <tr key={a.key}>
-                      <td className="px-3 py-2 text-gray-800">{a.name}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-600">{a.entries.length}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-600">{fmt(a.openingBalance)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-600">{fmt(a.closingBalance)}</td>
+                      <td className="px-3 py-2 text-gray-800 dark:text-slate-200">{a.name}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-600 dark:text-slate-400">{a.entries.length}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-600 dark:text-slate-400">{fmt(a.openingBalance)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-600 dark:text-slate-400">{fmt(a.closingBalance)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -109,23 +109,23 @@ export default function BankFilesStep(props: BankFilesStepProps) {
         )}
 
         {props.systemError && (
-          <p className="mt-3 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2" role="alert">
+          <p className="mt-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 rounded-lg px-3 py-2" role="alert">
             {props.systemError}
           </p>
         )}
       </section>
 
       {/* ── Extratos ──────────────────────────────────────────────────────── */}
-      <section className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-5">
+      <section className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-sm p-5 mb-5">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">2</span>
-          <h3 className="text-sm font-bold text-gray-900">Extratos bancários</h3>
+          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400">2</span>
+          <h3 className="text-sm font-bold text-gray-900 dark:text-slate-100">Extratos bancários</h3>
         </div>
-        <p className="text-xs text-gray-500 mb-3">
-          Um arquivo por conta. <strong className="text-gray-700">Prefira sempre o extrato em Excel (.xlsx ou .xls).</strong>
+        <p className="text-xs text-gray-500 dark:text-slate-400 mb-3">
+          Um arquivo por conta. <strong className="text-gray-700 dark:text-slate-300">Prefira sempre o extrato em Excel (.xlsx ou .xls).</strong>
         </p>
 
-        <div className="mb-4 flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
+        <div className="mb-4 flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl text-xs text-amber-900 dark:text-amber-200">
           <span className="flex-shrink-0 mt-0.5">⚠</span>
           <span>
             <strong>PDF só quando o banco não oferecer planilha.</strong> PDF não tem colunas de verdade: a leitura é
@@ -138,7 +138,7 @@ export default function BankFilesStep(props: BankFilesStepProps) {
 
         {props.statementLoading && <Spinner label="Lendo extrato..." />}
         {props.statementErrors.map((error) => (
-          <p key={error} className="mt-3 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2" role="alert">
+          <p key={error} className="mt-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 rounded-lg px-3 py-2" role="alert">
             {error}
           </p>
         ))}
@@ -160,44 +160,44 @@ export default function BankFilesStep(props: BankFilesStepProps) {
       </section>
 
       {/* ── Período e ação ────────────────────────────────────────────────── */}
-      <section className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 flex flex-wrap items-end gap-4">
+      <section className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-sm p-5 flex flex-wrap items-end gap-4">
         <div className="flex items-center gap-2 w-full">
-          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">3</span>
-          <h3 className="text-sm font-bold text-gray-900">Período da conciliação</h3>
+          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400">3</span>
+          <h3 className="text-sm font-bold text-gray-900 dark:text-slate-100">Período da conciliação</h3>
         </div>
-        <label className="text-xs text-gray-500">
+        <label className="text-xs text-gray-500 dark:text-slate-400">
           De
           <input
             type="date"
             value={period?.start ?? ''}
             disabled={!period}
             onChange={(e) => period && e.target.value && props.onPeriod({ ...period, start: e.target.value })}
-            className="mt-1 block px-3 py-1.5 text-sm text-gray-800 border border-gray-300 rounded-lg disabled:bg-gray-50"
+            className="bg-white dark:bg-slate-900 mt-1 block px-3 py-1.5 text-sm text-gray-800 dark:text-slate-200 border border-gray-300 dark:border-slate-600 rounded-lg disabled:bg-gray-50 dark:disabled:bg-slate-800"
           />
         </label>
-        <label className="text-xs text-gray-500">
+        <label className="text-xs text-gray-500 dark:text-slate-400">
           Até
           <input
             type="date"
             value={period?.end ?? ''}
             disabled={!period}
             onChange={(e) => period && e.target.value && props.onPeriod({ ...period, end: e.target.value })}
-            className="mt-1 block px-3 py-1.5 text-sm text-gray-800 border border-gray-300 rounded-lg disabled:bg-gray-50"
+            className="bg-white dark:bg-slate-900 mt-1 block px-3 py-1.5 text-sm text-gray-800 dark:text-slate-200 border border-gray-300 dark:border-slate-600 rounded-lg disabled:bg-gray-50 dark:disabled:bg-slate-800"
           />
         </label>
-        <p className="text-xs text-gray-400 flex-1 min-w-[200px]">
+        <p className="text-xs text-gray-400 dark:text-slate-500 flex-1 min-w-[200px]">
           Vem do relatório do sistema. Movimentos do extrato fora do período ficam de fora.
         </p>
 
-        <div className="w-full flex flex-wrap items-center justify-end gap-3 pt-2 border-t border-gray-100">
-          {blockers.length > 0 && <p className="text-xs text-gray-500 mr-auto">{blockers[0]}</p>}
+        <div className="w-full flex flex-wrap items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-slate-800">
+          {blockers.length > 0 && <p className="text-xs text-gray-500 dark:text-slate-400 mr-auto">{blockers[0]}</p>}
           {props.hasEditedResults && (
-            <p className="text-xs text-amber-700 mr-auto">Conciliar de novo refaz o casamento e descarta as alterações feitas à mão.</p>
+            <p className="text-xs text-amber-700 dark:text-amber-300 mr-auto">Conciliar de novo refaz o casamento e descarta as alterações feitas à mão.</p>
           )}
           {props.onShowResults && (
             <button
               onClick={props.onShowResults}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors shadow-sm"
             >
               Voltar ao resultado
             </button>
@@ -219,7 +219,7 @@ function Spinner({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-2 py-4 justify-center">
       <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-500 border-t-transparent" />
-      <p className="text-xs text-gray-500">{label}</p>
+      <p className="text-xs text-gray-500 dark:text-slate-400">{label}</p>
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import type { Statement, StatementBalancePoint, StatementMovement } from '../../types/bankReconciliation'
 import { parseDate, parseMoney } from './money'
+import { isRedundantText } from './redundantRecords'
 import { isBalanceLabel, ensureChronological } from './statementSheet'
 import { normalizeText } from './text'
 
@@ -92,6 +93,8 @@ interface ColumnHints {
 interface PdfMovement extends StatementMovement {
   explicitSign: boolean
   column: 'debit' | 'credit' | null
+  // Texto da própria linha do movimento é um registro redundante
+  redundant: boolean
 }
 
 function columnHints(line: PdfLine): ColumnHints | null {
@@ -169,9 +172,12 @@ export function parseStatementPdfLines(lines: PdfLine[], fileName: string, fallb
     }
 
     if (isBalanceLabel(label)) {
-      // "Saldo anterior" pode vir antes da primeira data: fica no começo da sequência
+      // "Saldo em 21/09/2026: R$ …" traz a data no texto; "Saldo anterior" antes da primeira
+      // data fica sem data, no começo da sequência
       const balance = parseMoney(tokens[tokens.length - 1][0])
-      if (balance !== null) balances.push({ order: order++, date: date ?? currentDate ?? '', label, balance })
+      const inlineDate = label.match(/\b\d{1,2}\/\d{1,2}\/\d{4}\b/)
+      const balanceDate = date ?? (inlineDate ? parseDate(inlineDate[0]) : null) ?? currentDate ?? ''
+      if (balance !== null) balances.push({ order: order++, date: balanceDate, label, balance })
       classified.push({ kind: 'break' })
       return
     }
@@ -207,6 +213,7 @@ export function parseStatementPdfLines(lines: PdfLine[], fileName: string, fallb
       balance: balanceToken ? parseMoney(balanceToken[0]) : null,
       explicitSign: /[-\u2212\u2013(]|[DC]\s*$/.test(amountToken[0].trim()),
       column,
+      redundant: isRedundantText(label),
     }
     movements.push(movement)
     classified.push({ kind: 'movement', line, movement, before: [], after: [] })
@@ -270,6 +277,7 @@ export function parseStatementPdfLines(lines: PdfLine[], fileName: string, fallb
     document: m.document,
     amount: m.amount,
     balance: m.balance,
+    ...(m.redundant || isRedundantText(m.description) ? { ignored: true } : {}),
   }))
   const ordered = ensureChronological(clean, balances)
   if (ordered.reversed) warnings.push('O extrato estava do mais recente para o mais antigo; a ordem foi invertida.')
@@ -295,6 +303,9 @@ function applySigns(movements: PdfMovement[], balances: StatementBalancePoint[])
     ...balances.map((b) => ({ order: b.order, movement: null, balance: b.balance as number | null })),
   ].sort((a, b) => a.order - b.order)
 
+  // Extrato que escreve o sinal dos débitos ("-6,90") deixa os créditos sem sinal
+  const signsDebits = movements.some((m) => m.explicitSign && m.amount < 0)
+
   let unsure = 0
   let previousBalance: number | null = null
   for (const step of sequence) {
@@ -306,6 +317,8 @@ function applySigns(movements: PdfMovement[], balances: StatementBalancePoint[])
       } else if (previousBalance !== null && m.balance !== null && Math.abs(previousBalance - abs - m.balance) < 0.005) {
         m.amount = -abs
       } else if (previousBalance !== null && m.balance !== null && Math.abs(previousBalance + abs - m.balance) < 0.005) {
+        m.amount = abs
+      } else if (signsDebits) {
         m.amount = abs
       } else {
         const text = normalizeText(m.description)

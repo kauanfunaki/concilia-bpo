@@ -66,6 +66,10 @@ export interface StatementMovement {
   amount: number
   // Saldo após o movimento, quando o banco informa
   balance: number | null
+  // Tipo da transação, quando o banco tem coluna própria ("Depósito de PIX", "Tarifa")
+  kind?: string
+  // Registro redundante (aplicação/resgate da conta remunerada): fica fora da conciliação
+  ignored?: boolean
 }
 
 // Linha de saldo informada pelo banco ("SALDO DIA", "SALDO ANTERIOR"…)
@@ -85,6 +89,7 @@ export type StatementField =
   | 'credit'
   | 'debit'
   | 'direction'
+  | 'kind'
   | 'balance'
 
 // Campo do extrato → índice da coluna na planilha
@@ -133,6 +138,9 @@ export interface AccountBalances {
   bankClosing: number | null
 }
 
+// Logos embutidas na planilha exportada: a da empresa à esquerda do título, a do banco à direita
+export type LogoId = 'inovati' | 'btg' | 'caixa' | 'qitech'
+
 // Aparência e rótulos da aba na planilha exportada (cores em ARGB)
 export interface AccountProfile {
   sheetName: string
@@ -143,6 +151,8 @@ export interface AccountProfile {
   balanceColor: string
   highlightColor: string
   tabColor: string
+  logo: LogoId | null
+  bankLogo: LogoId | null
 }
 
 export interface AccountResult {
@@ -154,4 +164,7 @@ export interface AccountResult {
   balances: AccountBalances
   // Soma dos movimentos do extrato no período — confere saldo inicial + movimentos = final
   statementTotal: number
+  // Registros redundantes do período, fora da conciliação mas dentro do saldo do banco
+  ignoredCount: number
+  ignoredTotal: number
 }

@@ -1,3 +1,11 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Controles nativos (select, calendário, barra de rolagem) acompanham o tema */
+:root {
+  color-scheme: light;
+}
+:root.dark {
+  color-scheme: dark;
+}

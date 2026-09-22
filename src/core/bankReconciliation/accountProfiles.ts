@@ -1,4 +1,4 @@
-import type { AccountProfile, Period, Statement, SystemAccount } from '../../types/bankReconciliation'
+import type { AccountProfile, LogoId, Period, Statement, SystemAccount } from '../../types/bankReconciliation'
 import { toCents } from './money'
 import { inPeriod } from './statementBalance'
 import { normalizeText } from './text'
@@ -15,8 +15,17 @@ interface ProfilePreset {
   tokens: string[]
   // Posição da aba no relatório geral
   position: number
-  profile: AccountProfile
+  // Todas as contas do perfil levam a logo da Inovati (ver defaultProfile)
+  profile: Omit<AccountProfile, 'logo'>
 }
+
+// Logo do banco pelo nome da conta, para qualquer cliente
+const BANK_LOGOS: { tokens: string[]; logo: LogoId }[] = [
+  { tokens: ['BTG'], logo: 'btg' },
+  { tokens: ['CAIXA', 'ECONOMICA'], logo: 'caixa' },
+  { tokens: ['CEF'], logo: 'caixa' },
+  { tokens: ['QI', 'TECH'], logo: 'qitech' },
+]
 
 /**
  * Perfil da Inovati: abas, títulos e cores de Conciliação_15.09.xlsx.
@@ -35,6 +44,7 @@ const INOVATI_PRESETS: ProfilePreset[] = [
       balanceColor: 'FF36116D',
       highlightColor: 'FFCCC1DA',
       tabColor: 'FFB3A2C7',
+      bankLogo: 'btg',
     },
   },
   {
@@ -46,6 +56,7 @@ const INOVATI_PRESETS: ProfilePreset[] = [
       bankLabel: 'Btg - Matriz',
       balanceLabel: 'Btg Matriz',
       ...DEFAULT_COLORS,
+      bankLogo: 'btg',
     },
   },
   {
@@ -57,6 +68,7 @@ const INOVATI_PRESETS: ProfilePreset[] = [
       bankLabel: 'Btg - Filial MT',
       balanceLabel: 'Btg MT',
       ...DEFAULT_COLORS,
+      bankLogo: 'btg',
     },
   },
   {
@@ -71,6 +83,7 @@ const INOVATI_PRESETS: ProfilePreset[] = [
       balanceColor: 'FF113B91',
       highlightColor: 'FFB7DEE8',
       tabColor: 'FF93CDDD',
+      bankLogo: 'qitech',
     },
   },
   {
@@ -85,6 +98,7 @@ const INOVATI_PRESETS: ProfilePreset[] = [
       balanceColor: 'FF003A8F',
       highlightColor: 'FFFCD5B5',
       tabColor: 'FFFAC090',
+      bankLogo: 'caixa',
     },
   },
 ]
@@ -96,6 +110,11 @@ function keyTokens(key: string): string[] {
 function findPreset(key: string): ProfilePreset | null {
   const tokens = keyTokens(key)
   return INOVATI_PRESETS.find((p) => p.tokens.every((t) => tokens.includes(t))) ?? null
+}
+
+export function bankLogoFor(key: string): LogoId | null {
+  const tokens = keyTokens(key)
+  return BANK_LOGOS.find((b) => b.tokens.every((t) => tokens.includes(t)))?.logo ?? null
 }
 
 /** O perfil da Inovati só vale para relatório da Inovati — outro cliente pode ter conta "CAIXA" */
@@ -115,13 +134,15 @@ function titleCase(name: string): string {
 
 export function defaultProfile(account: Pick<SystemAccount, 'key' | 'name'>, inovati: boolean): AccountProfile {
   const preset = inovati ? findPreset(account.key) : null
-  if (preset) return { ...preset.profile }
+  if (preset) return { ...preset.profile, logo: 'inovati' }
   return {
     sheetName: sheetNameFrom(account.name),
     company: '',
     bankLabel: titleCase(account.name),
     balanceLabel: titleCase(account.name),
     ...DEFAULT_COLORS,
+    logo: null,
+    bankLogo: bankLogoFor(account.key),
   }
 }
 
@@ -156,7 +177,7 @@ export interface AccountSuggestion {
  * da conta pesam mais; o nome do arquivo ("Extrato Caixa.xlsx") ajuda a desempatar.
  */
 export function suggestAccount(statement: Statement, accounts: SystemAccount[], period: Period | null): AccountSuggestion {
-  const movements = period ? statement.movements.filter((m) => inPeriod(m.date, period)) : statement.movements
+  const movements = statement.movements.filter((m) => !m.ignored && (!period || inPeriod(m.date, period)))
   const fileTokens = new Set(keyTokens(statement.fileName.replace(/\.[a-z0-9]+$/i, '')))
 
   let best: { account: SystemAccount; score: number; hits: number; nameHits: number } | null = null

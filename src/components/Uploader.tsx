@@ -68,8 +68,8 @@ export default function Uploader({ recentFiles, onFileParsed, onError, onRemoveH
     <div className="max-w-3xl mx-auto">
       {/* Hero */}
       <div className="mb-8 text-center">
-        <h2 className="text-2xl font-bold text-gray-900">Conciliação de Bases</h2>
-        <p className="mt-1 text-gray-500 text-sm">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Conciliação de Bases</h2>
+        <p className="mt-1 text-gray-500 dark:text-slate-400 text-sm">
           Faça o upload das duas planilhas Excel ou selecione um arquivo recente.
         </p>
       </div>
@@ -102,21 +102,21 @@ export default function Uploader({ recentFiles, onFileParsed, onError, onRemoveH
 
       {/* Histórico */}
       {recentFiles.length > 0 && (
-        <div className="mb-8 bg-white border border-gray-200 rounded-xl shadow-sm p-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Arquivos recentes</p>
+        <div className="mb-8 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-sm p-4">
+          <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">Arquivos recentes</p>
           <div className="space-y-2">
             {recentFiles.map((entry) => (
-              <div key={entry.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 group">
+              <div key={entry.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 group">
                 {/* Ícone */}
-                <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 </div>
                 {/* Nome + data */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{entry.name}</p>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-sm font-medium text-gray-800 dark:text-slate-200 truncate">{entry.name}</p>
+                  <p className="text-xs text-gray-400 dark:text-slate-500">
                     {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(entry.savedAt))}
                     {' · '}{entry.sheets.length} aba{entry.sheets.length !== 1 ? 's' : ''}
                   </p>
@@ -125,20 +125,20 @@ export default function Uploader({ recentFiles, onFileParsed, onError, onRemoveH
                 <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={() => handleSelectRecent('base1', entry)}
-                    className="px-2.5 py-1 text-xs font-medium bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors"
+                    className="px-2.5 py-1 text-xs font-medium bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 rounded-md hover:bg-blue-100 dark:hover:bg-blue-500/25 transition-colors"
                   >
                     Base 1
                   </button>
                   <button
                     onClick={() => handleSelectRecent('base2', entry)}
-                    className="px-2.5 py-1 text-xs font-medium bg-violet-50 text-violet-700 rounded-md hover:bg-violet-100 transition-colors"
+                    className="px-2.5 py-1 text-xs font-medium bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 rounded-md hover:bg-violet-100 dark:hover:bg-violet-500/25 transition-colors"
                   >
                     Base 2
                   </button>
                   <button
                     onClick={() => onRemoveHistory(entry.id)}
                     title="Remover do histórico"
-                    className="px-2 py-1 text-xs text-gray-400 hover:text-red-500 transition-colors rounded-md hover:bg-red-50"
+                    className="px-2 py-1 text-xs text-gray-400 dark:text-slate-500 hover:text-red-500 transition-colors rounded-md hover:bg-red-50 dark:hover:bg-red-500/15"
                   >
                     ✕
                   </button>
@@ -183,8 +183,8 @@ function FileCard({ label, sublabel, color, state, inputRef, onPickFile, onFileC
   const [dragOver, setDragOver] = useState(false)
 
   const accent = color === 'blue'
-    ? { ring: 'ring-blue-400 bg-blue-50', badge: 'bg-blue-100 text-blue-700', btn: 'bg-blue-600 hover:bg-blue-700' }
-    : { ring: 'ring-violet-400 bg-violet-50', badge: 'bg-violet-100 text-violet-700', btn: 'bg-violet-600 hover:bg-violet-700' }
+    ? { ring: 'ring-blue-400 bg-blue-50 dark:bg-blue-500/10', badge: 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400', btn: 'bg-blue-600 hover:bg-blue-700' }
+    : { ring: 'ring-violet-400 bg-violet-50 dark:bg-violet-500/10', badge: 'bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300', btn: 'bg-violet-600 hover:bg-violet-700' }
 
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault()
@@ -198,14 +198,14 @@ function FileCard({ label, sublabel, color, state, inputRef, onPickFile, onFileC
     if (file) onDrop(file)
   }
 
-  const baseCard = 'rounded-xl border-2 transition-all duration-150 bg-white shadow-sm'
+  const baseCard = 'rounded-xl border-2 transition-all duration-150 bg-white dark:bg-slate-900 shadow-sm'
   const borderClass = dragOver
-    ? `border-dashed ${color === 'blue' ? 'border-blue-400 bg-blue-50' : 'border-violet-400 bg-violet-50'}`
+    ? `border-dashed ${color === 'blue' ? 'border-blue-400 bg-blue-50 dark:bg-blue-500/10' : 'border-violet-400 bg-violet-50 dark:bg-violet-500/10'}`
     : state.error
-    ? 'border-red-300 bg-red-50'
+    ? 'border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10'
     : state.name
     ? `border-${color === 'blue' ? 'blue' : 'violet'}-200`
-    : 'border-gray-200 border-dashed hover:border-gray-300'
+    : 'border-gray-200 dark:border-slate-700 border-dashed hover:border-gray-300 dark:hover:border-slate-500'
 
   return (
     <div
@@ -217,7 +217,7 @@ function FileCard({ label, sublabel, color, state, inputRef, onPickFile, onFileC
       {/* Header */}
       <div className="flex items-center gap-2 mb-4">
         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${accent.badge}`}>{label}</span>
-        <span className="text-xs text-gray-400">{sublabel}</span>
+        <span className="text-xs text-gray-400 dark:text-slate-500">{sublabel}</span>
       </div>
 
       {/* Conteúdo central */}
@@ -225,41 +225,41 @@ function FileCard({ label, sublabel, color, state, inputRef, onPickFile, onFileC
         {state.loading ? (
           <>
             <div className="animate-spin rounded-full h-8 w-8 border-3 border-blue-500 border-t-transparent mb-2" />
-            <p className="text-xs text-gray-500">Lendo arquivo...</p>
+            <p className="text-xs text-gray-500 dark:text-slate-400">Lendo arquivo...</p>
           </>
         ) : state.name ? (
           <>
-            <div className={`w-10 h-10 rounded-full ${color === 'blue' ? 'bg-blue-100' : 'bg-violet-100'} flex items-center justify-center mb-2`}>
-              <svg className={`w-5 h-5 ${color === 'blue' ? 'text-blue-600' : 'text-violet-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <div className={`w-10 h-10 rounded-full ${color === 'blue' ? 'bg-blue-100 dark:bg-blue-500/20' : 'bg-violet-100 dark:bg-violet-500/20'} flex items-center justify-center mb-2`}>
+              <svg className={`w-5 h-5 ${color === 'blue' ? 'text-blue-600 dark:text-blue-400' : 'text-violet-600 dark:text-violet-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <p className="text-sm font-semibold text-gray-800 max-w-full truncate px-2">{state.name}</p>
-            <button onClick={onReplace} className="mt-2 text-xs text-gray-400 underline hover:text-gray-600">
+            <p className="text-sm font-semibold text-gray-800 dark:text-slate-200 max-w-full truncate px-2">{state.name}</p>
+            <button onClick={onReplace} className="mt-2 text-xs text-gray-400 dark:text-slate-500 underline hover:text-gray-600 dark:hover:text-slate-300">
               Trocar arquivo
             </button>
           </>
         ) : (
           <>
-            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mb-3">
-              <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-slate-800 flex items-center justify-center mb-3">
+              <svg className="w-5 h-5 text-gray-400 dark:text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
               </svg>
             </div>
-            <p className="text-xs text-gray-500 mb-3">Arraste um arquivo aqui ou</p>
+            <p className="text-xs text-gray-500 dark:text-slate-400 mb-3">Arraste um arquivo aqui ou</p>
             <button
               onClick={onPickFile}
               className={`px-4 py-1.5 text-xs font-semibold text-white rounded-lg ${accent.btn} transition-colors`}
             >
               Selecionar arquivo
             </button>
-            <p className="mt-2 text-xs text-gray-400">.xls / .xlsx · até 20 MB</p>
+            <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">.xls / .xlsx · até 20 MB</p>
           </>
         )}
       </div>
 
       {state.error && (
-        <p className="mt-3 text-xs text-red-600 bg-red-50 rounded-lg px-2 py-1.5" role="alert">
+        <p className="mt-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 rounded-lg px-2 py-1.5" role="alert">
           {state.error}
         </p>
       )}

@@ -1,13 +1,14 @@
 import type ExcelJS from 'exceljs'
-import type { AccountResult, Period, Situation } from '../../types/bankReconciliation'
+import type { AccountResult, LogoId, Period, Situation } from '../../types/bankReconciliation'
 import { SITUATIONS } from '../../types/bankReconciliation'
 import { sheetNameFrom } from './accountProfiles'
 import { roundCents } from './money'
 
 /**
- * Relatório de conciliação no layout de Conciliação_15.09.xlsx:
- * uma aba por banco (faixa de título, tabela Data/Lançamento/Valor/Situação/Documento e
- * bloco SALDO), mais a aba Config oculta com a lista da coluna Situação.
+ * Relatório de conciliação no layout de Conciliação_16.09.xlsx:
+ * uma aba por banco (faixa de título com a logo, tabela Data/Lançamento/Valor/Situação/Documento
+ * e bloco SALDO), mais a aba Config oculta com a lista da coluna Situação.
+ * A planilha vai para o cliente: a conferência de saldo é interna e fica só na tela.
  */
 
 const FONT = 'Aptos'
@@ -27,6 +28,30 @@ const SITUATION_FILL: Partial<Record<Situation, string | 'highlight'>> = {
 }
 
 type Border = Partial<ExcelJS.Borders>
+
+export type LogoFiles = Partial<Record<LogoId, ArrayBuffer | Uint8Array>>
+
+interface LogoPlacement {
+  // Âncora nativa do Excel: coluna/linha (base 0) + deslocamento em EMU dentro da célula
+  anchor: { nativeCol: number; nativeColOff: number; nativeRow: number; nativeRowOff: number }
+  size: { width: number; height: number }
+}
+
+// Posição e tamanho de cada logo, medidos no modelo de 16/09: a da empresa no canto esquerdo
+// do cabeçalho (B2:B3), a do banco no canto direito, acima do nome do banco (coluna F)
+const LOGO_PLACEMENT: Record<LogoId, LogoPlacement> = {
+  inovati: { anchor: { nativeCol: 1, nativeColOff: 245412, nativeRow: 1, nativeRowOff: 124944 }, size: { width: 107, height: 88 } },
+  btg: { anchor: { nativeCol: 5, nativeColOff: 365872, nativeRow: 1, nativeRowOff: 145674 }, size: { width: 146, height: 58 } },
+  caixa: { anchor: { nativeCol: 5, nativeColOff: 847725, nativeRow: 0, nativeRowOff: 145675 }, size: { width: 102, height: 102 } },
+  qitech: { anchor: { nativeCol: 5, nativeColOff: 800101, nativeRow: 0, nativeRowOff: 114297 }, size: { width: 104, height: 104 } },
+}
+
+function toBase64(data: ArrayBuffer | Uint8Array): string {
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  return btoa(binary)
+}
 
 function solid(argb: string): ExcelJS.Fill {
   return { type: 'pattern', pattern: 'solid', fgColor: { argb } }
@@ -50,16 +75,22 @@ function uniqueSheetName(name: string, used: Set<string>): string {
   return candidate
 }
 
-export async function buildBankWorkbook(accounts: AccountResult[]): Promise<ExcelJS.Workbook> {
+export async function buildBankWorkbook(accounts: AccountResult[], logos: LogoFiles = {}): Promise<ExcelJS.Workbook> {
   const { default: Excel } = await import('exceljs')
   const workbook = new Excel.Workbook()
   workbook.creator = 'Conciliador BPO'
   workbook.created = new Date()
 
+  // Cada logo entra uma vez no arquivo e é reaproveitada pelas abas
+  const imageIds = new Map<LogoId, number>()
+  for (const [id, file] of Object.entries(logos) as [LogoId, ArrayBuffer | Uint8Array | undefined][]) {
+    if (file) imageIds.set(id, workbook.addImage({ base64: toBase64(file), extension: 'png' }))
+  }
+
   addConfigSheet(workbook, accounts)
   const used = new Set<string>(['config'])
   for (const account of accounts) {
-    addAccountSheet(workbook, account, uniqueSheetName(sheetNameFrom(account.profile.sheetName), used))
+    addAccountSheet(workbook, account, uniqueSheetName(sheetNameFrom(account.profile.sheetName), used), imageIds)
   }
   return workbook
 }
@@ -76,7 +107,7 @@ function addConfigSheet(workbook: ExcelJS.Workbook, accounts: AccountResult[]): 
   ws.getColumn('G').width = 24
 }
 
-function addAccountSheet(workbook: ExcelJS.Workbook, account: AccountResult, sheetName: string): void {
+function addAccountSheet(workbook: ExcelJS.Workbook, account: AccountResult, sheetName: string, imageIds: Map<LogoId, number>): void {
   const { profile, rows, balances } = account
   const ws = workbook.addWorksheet(sheetName, {
     properties: { tabColor: { argb: profile.tabColor } },
@@ -109,6 +140,13 @@ function addAccountSheet(workbook: ExcelJS.Workbook, account: AccountResult, she
   setBorder(ws, 'F2', { top: medium(), right: medium() })
   setBorder(ws, 'B3', { left: medium() })
   setBorder(ws, 'F3', { right: medium() })
+  for (const logo of [profile.logo, profile.bankLogo]) {
+    const imageId = logo ? imageIds.get(logo) : undefined
+    if (!logo || imageId === undefined) continue
+    const { anchor, size } = LOGO_PLACEMENT[logo]
+    // O ExcelJS aceita a âncora nativa, mas só tipa col/row
+    ws.addImage(imageId, { tl: anchor as unknown as { col: number; row: number }, ext: size, editAs: 'oneCell' })
+  }
 
   // ── Cabeçalho da tabela (linha 4) ─────────────────────────────────────────
   const headers: [string, string, ExcelJS.Alignment['horizontal']][] = [
@@ -199,39 +237,6 @@ function addAccountSheet(workbook: ExcelJS.Workbook, account: AccountResult, she
 
   balanceBlock(ws, 4, 'Atua', profile.balanceColor, balances.systemOpening, balances.systemClosing)
   balanceBlock(ws, 8, profile.balanceLabel, profile.balanceColor, balances.bankOpening, balances.bankClosing)
-
-  // Conferência: a diferença entre as variações é o que as pendências precisam explicar
-  ws.mergeCells('I12:J12')
-  const check = ws.getCell('I12')
-  check.value = 'Conferência'
-  check.font = { name: FONT, size: 12, bold: true, color: { argb: WHITE } }
-  check.fill = solid(profile.balanceColor)
-  check.alignment = { horizontal: 'center', vertical: 'middle' }
-  check.border = { top: thin(), left: thin(), right: thin() }
-  setBorder(ws, 'J12', { top: thin(), right: thin() })
-
-  const variation = (closing: number | null, opening: number | null) =>
-    closing !== null && opening !== null ? roundCents(closing - opening) : null
-  const systemVariation = variation(balances.systemClosing, balances.systemOpening)
-  const bankVariation = variation(balances.bankClosing, balances.bankOpening)
-  const difference = systemVariation !== null && bankVariation !== null ? roundCents(bankVariation - systemVariation) : null
-
-  const checkRows: [number, string, string, number | null][] = [
-    [13, 'Var. Atua', 'J6-J5', systemVariation],
-    [14, 'Var. Banco', 'J10-J9', bankVariation],
-    [15, 'Diferença', 'J14-J13', difference],
-  ]
-  for (const [r, label, formula, result] of checkRows) {
-    const labelCell = ws.getCell(`I${r}`)
-    labelCell.value = label
-    labelCell.font = { name: FONT, size: 12, bold: true }
-    labelCell.border = { left: thin(), ...(r === 15 ? { bottom: thin() } : {}) }
-    const valueCell = ws.getCell(`J${r}`)
-    valueCell.value = result === null ? null : { formula, result }
-    valueCell.numFmt = MONEY_FORMAT
-    valueCell.font = { name: FONT, size: 12 }
-    valueCell.border = { right: thin(), ...(r === 15 ? { bottom: thin() } : {}) }
-  }
 }
 
 function balanceBlock(
@@ -294,8 +299,8 @@ export function exportFileName(period: Period, sheetName?: string): string {
   return `Conciliação${bank}_${dates}.xlsx`
 }
 
-export async function downloadBankWorkbook(accounts: AccountResult[], fileName: string): Promise<void> {
-  const workbook = await buildBankWorkbook(accounts)
+export async function downloadBankWorkbook(accounts: AccountResult[], fileName: string, logos: LogoFiles = {}): Promise<void> {
+  const workbook = await buildBankWorkbook(accounts, logos)
   const buffer = await workbook.xlsx.writeBuffer()
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
