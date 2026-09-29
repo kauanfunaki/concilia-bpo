@@ -3,20 +3,33 @@ import ProFrotasFilesStep from './ProFrotasFilesStep'
 import ProFrotasResultStep from './ProFrotasResultStep'
 import { fileExtension, readAsArrayBuffer } from '../../core/bankReconciliation/fileReaders'
 import { extractXmlFiles } from '../../core/proFrotas/archive'
-import { parseProFrotasSheets, readProFrotasWorkbook } from '../../core/proFrotas/sheet'
+import {
+  detectLayout,
+  layoutForSheet,
+  mappingTitles,
+  missingRequired,
+  parseSheetLines,
+  readProFrotasWorkbook,
+} from '../../core/proFrotas/sheet'
+import type { Field, PreferredTitles, ProFrotasSheet, SheetLayout } from '../../core/proFrotas/sheet'
 import { DEFAULT_MAX_DAYS, DEFAULT_TOLERANCE, detectCompanies, suggestPeriodEnd, validateProFrotas } from '../../core/proFrotas/validator'
 import { decodeXml, parseNfeXml } from '../../core/proFrotas/xml'
-import type { SheetLine, ValidationResult, XmlNote } from '../../types/proFrotas'
+import type { CnpjConversion, SheetLine, ValidationResult, XmlNote } from '../../types/proFrotas'
 
 const MAX_SHEET_BYTES = 30 * 1024 * 1024
 const MAX_ZIP_BYTES = 400 * 1024 * 1024
 // XMLs lidos por vez antes de devolver a vez à tela (5.000 notas por quinzena não travam o navegador)
 const PARSE_CHUNK = 250
+// Colunas escolhidas na última importação, pelo título — a "configuração" do app antigo
+const COLUMNS_STORAGE_KEY = 'conciliador-bpo:pro-frotas:colunas'
 
 export interface LoadedSheet {
   id: string
   fileName: string
   size: number
+  workbook: ProFrotasSheet[]
+  layout: SheetLayout
+  // Vazio enquanto faltar coluna obrigatória
   lines: SheetLine[]
 }
 
@@ -50,6 +63,14 @@ export interface SettingsDraft {
   tolerance: number
 }
 
+export interface Recipient {
+  cnpj: string
+  name: string
+  notes: number
+}
+
+export type LayoutChange = { sheetIndex: number } | { field: Field; column: number | null }
+
 const initialSettings: SettingsDraft = {
   companyCnpj: '',
   periodEnd: '',
@@ -60,8 +81,35 @@ const initialSettings: SettingsDraft = {
 
 const yieldToBrowser = () => new Promise((resolve) => setTimeout(resolve, 0))
 
+function loadPreferred(): PreferredTitles {
+  try {
+    return JSON.parse(localStorage.getItem(COLUMNS_STORAGE_KEY) ?? '{}') as PreferredTitles
+  } catch {
+    return {}
+  }
+}
+
+function savePreferred(titles: PreferredTitles): void {
+  try {
+    localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(titles))
+  } catch {
+    /* navegador sem armazenamento: a escolha vale só para esta importação */
+  }
+}
+
+function readLines(workbook: ProFrotasSheet[], layout: SheetLayout, fileName: string): SheetLine[] {
+  if (missingRequired(layout.mapping).length) return []
+  return parseSheetLines(workbook[layout.sheetIndex], layout.headerIndex, layout.mapping, fileName)
+}
+
+/** Linhas com o CNPJ da Empresa já convertido para o destinatário das notas */
+function convertLines(lines: SheetLine[], conversions: Record<string, string>): SheetLine[] {
+  return lines.map((l) => (conversions[l.companyCnpj] ? { ...l, companyCnpj: conversions[l.companyCnpj] } : l))
+}
+
 export default function ProFrotasValidation() {
   const [sheets, setSheets] = useState<LoadedSheet[]>([])
+  const [conversions, setConversions] = useState<Record<string, string>>({})
   const [sources, setSources] = useState<LoadedXmlSource[]>([])
   const [settings, setSettings] = useState<SettingsDraft>(initialSettings)
   const [result, setResult] = useState<ValidationResult | null>(null)
@@ -70,8 +118,22 @@ export default function ProFrotasValidation() {
   const [sheetErrors, setSheetErrors] = useState<string[]>([])
   const [xmlErrors, setXmlErrors] = useState<string[]>([])
 
-  const lines = useMemo(() => sheets.flatMap((s) => s.lines), [sheets])
+  const lines = useMemo(() => convertLines(sheets.flatMap((s) => s.lines), conversions), [sheets, conversions])
   const companies = useMemo(() => detectCompanies(lines), [lines])
+
+  // Destinatários das notas de saída enviadas: é por eles que se descobre um CNPJ a converter
+  const recipients = useMemo(() => {
+    const byCnpj = new Map<string, Recipient>()
+    for (const s of sources) {
+      for (const { note } of s.entries) {
+        if (note.type !== 1) continue
+        const r = byCnpj.get(note.recipientCnpj) ?? { cnpj: note.recipientCnpj, name: note.recipientName, notes: 0 }
+        r.notes++
+        byCnpj.set(note.recipientCnpj, r)
+      }
+    }
+    return [...byCnpj.values()].sort((a, b) => b.notes - a.notes)
+  }, [sources])
 
   // O botão Validar fica no fim da página: sem isso o resultado abria no meio da tabela
   useEffect(() => {
@@ -79,18 +141,45 @@ export default function ProFrotasValidation() {
   }, [step])
 
   // Empresa e data final sugeridas pela planilha, até a pessoa mudar
-  function withSuggestions(next: LoadedSheet[], draft: SettingsDraft): SettingsDraft {
-    const allLines = next.flatMap((s) => s.lines)
-    const options = detectCompanies(allLines)
-    const companyCnpj = options.some((c) => c.cnpj === draft.companyCnpj) ? draft.companyCnpj : options[0]?.cnpj ?? ''
-    const periodEnd = draft.periodEndTouched && draft.periodEnd ? draft.periodEnd : suggestPeriodEnd(allLines, companyCnpj) ?? ''
-    return { ...draft, companyCnpj, periodEnd }
+  function applySuggestions(nextSheets: LoadedSheet[], nextConversions: Record<string, string>) {
+    const allLines = convertLines(nextSheets.flatMap((s) => s.lines), nextConversions)
+    setSettings((draft) => {
+      const options = detectCompanies(allLines)
+      const companyCnpj = options.some((c) => c.cnpj === draft.companyCnpj) ? draft.companyCnpj : options[0]?.cnpj ?? ''
+      const periodEnd = draft.periodEndTouched && draft.periodEnd ? draft.periodEnd : suggestPeriodEnd(allLines, companyCnpj) ?? ''
+      return { ...draft, companyCnpj, periodEnd }
+    })
+    setResult(null)
   }
 
   function updateSheets(next: LoadedSheet[]) {
     setSheets(next)
-    setSettings((draft) => withSuggestions(next, draft))
-    setResult(null)
+    applySuggestions(next, conversions)
+  }
+
+  function handleConversion(from: string, to: string | null) {
+    const next = { ...conversions }
+    if (to && to !== from) next[from] = to
+    else delete next[from]
+    setConversions(next)
+    // A empresa escolhida acompanha a conversão
+    setSettings((draft) => (draft.companyCnpj === (conversions[from] ?? from) ? { ...draft, companyCnpj: next[from] ?? from } : draft))
+    applySuggestions(sheets, next)
+  }
+
+  function handleLayout(id: string, change: LayoutChange) {
+    const next = sheets.map((sheet) => {
+      if (sheet.id !== id) return sheet
+      let layout: SheetLayout
+      if ('sheetIndex' in change) {
+        layout = layoutForSheet(sheet.workbook, change.sheetIndex, loadPreferred())
+      } else {
+        layout = { ...sheet.layout, mapping: { ...sheet.layout.mapping, [change.field]: change.column } }
+        savePreferred(mappingTitles(sheet.workbook[layout.sheetIndex], layout.headerIndex, layout.mapping))
+      }
+      return { ...sheet, layout, lines: readLines(sheet.workbook, layout, sheet.fileName) }
+    })
+    updateSheets(next)
   }
 
   async function handleSheetFiles(files: File[]) {
@@ -112,8 +201,11 @@ export default function ProFrotasValidation() {
       setProgress({ label: `Lendo ${file.name}…`, done: 0, total: 0 })
       await yieldToBrowser()
       try {
-        const lines = parseProFrotasSheets(readProFrotasWorkbook(await readAsArrayBuffer(file)), file.name)
-        next = [...next, { id: crypto.randomUUID(), fileName: file.name, size: file.size, lines }]
+        const workbook = readProFrotasWorkbook(await readAsArrayBuffer(file))
+        if (!workbook.some((s) => s.rows.length)) throw new Error('a planilha está vazia.')
+        const layout = detectLayout(workbook, loadPreferred())
+        const lines = readLines(workbook, layout, file.name)
+        next = [...next, { id: crypto.randomUUID(), fileName: file.name, size: file.size, workbook, layout, lines }]
       } catch (err) {
         setSheetErrors((prev) => [...prev, `${file.name}: ${err instanceof Error ? err.message : 'não foi possível ler a planilha.'}`])
       }
@@ -166,12 +258,14 @@ export default function ProFrotasValidation() {
 
   function handleValidate() {
     const xmls = sources.flatMap((s) => s.entries.map((e) => e.note))
+    const cnpjConversions: CnpjConversion[] = Object.entries(conversions).map(([from, to]) => ({ from, to }))
     setResult(
       validateProFrotas(lines, xmls, {
         companyCnpj: settings.companyCnpj,
         periodEnd: settings.periodEnd,
         maxDays: settings.maxDays,
         tolerance: settings.tolerance,
+        cnpjConversions: cnpjConversions.filter((c) => c.to === settings.companyCnpj),
       })
     )
     setStep('result')
@@ -179,6 +273,7 @@ export default function ProFrotasValidation() {
 
   function handleReset() {
     setSheets([])
+    setConversions({})
     setSources([])
     setSettings(initialSettings)
     setResult(null)
@@ -188,27 +283,24 @@ export default function ProFrotasValidation() {
   }
 
   if (step === 'result' && result) {
-    return (
-      <ProFrotasResultStep
-        result={result}
-        sources={sources}
-        onBack={() => setStep('files')}
-        onReset={handleReset}
-      />
-    )
+    return <ProFrotasResultStep result={result} sources={sources} onBack={() => setStep('files')} onReset={handleReset} />
   }
 
   return (
     <ProFrotasFilesStep
       sheets={sheets}
+      conversions={conversions}
       sources={sources}
       companies={companies}
+      recipients={recipients}
       settings={settings}
       progress={progress}
       sheetErrors={sheetErrors}
       xmlErrors={xmlErrors}
       onSheetFiles={handleSheetFiles}
       onXmlFiles={handleXmlFiles}
+      onLayout={handleLayout}
+      onConversion={handleConversion}
       onRemoveSheet={(id) => updateSheets(sheets.filter((s) => s.id !== id))}
       onRemoveSource={(id) => {
         setSources((prev) => prev.filter((s) => s.id !== id))

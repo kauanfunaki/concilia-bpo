@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import ExcelJS from 'exceljs'
-import { buildProFrotasWorkbook, formatCnpj, formatSources, reportFileName } from './report'
+import { buildProFrotasWorkbook, formatSources, reportFileName } from './report'
 import { validateProFrotas } from './validator'
 import type { SheetLine, XmlNote } from '../../types/proFrotas'
 
@@ -20,6 +20,7 @@ function line(noteText: string, amount: number, fuelDate = '2026-09-10'): SheetL
     companyName: 'Transportadora Exemplo',
     fuelDate,
     amount,
+    postponed: false,
   }
 }
 
@@ -107,11 +108,6 @@ describe('buildProFrotasWorkbook', () => {
 })
 
 describe('peças do relatório', () => {
-  it('formatCnpj', () => {
-    expect(formatCnpj('44555666000172')).toBe('44.555.666/0001-72')
-    expect(formatCnpj('123')).toBe('123')
-  })
-
   it('formatSources resume muitas linhas e nomeia o arquivo quando há mais de um', () => {
     const rows = [257, 260, 264, 265, 266, 267, 268].map((r) => ({ file: 'set.xlsx', row: r }))
     expect(formatSources(rows, false)).toBe('linhas 257, 260, 264, 265, 266 (+2)')

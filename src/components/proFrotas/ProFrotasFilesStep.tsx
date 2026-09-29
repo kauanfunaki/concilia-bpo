@@ -1,18 +1,24 @@
 import DropZone from '../bank/DropZone'
-import type { LoadedSheet, LoadedXmlSource, Progress, SettingsDraft } from './ProFrotasValidation'
-import { formatCnpj } from '../../core/proFrotas/report'
+import SheetSetup from './SheetSetup'
+import type { LayoutChange, LoadedSheet, LoadedXmlSource, Progress, Recipient, SettingsDraft } from './ProFrotasValidation'
+import { formatCnpj } from '../../core/proFrotas/cnpj'
+import { missingRequired } from '../../core/proFrotas/sheet'
 import type { CompanyOption } from '../../core/proFrotas/validator'
 
 interface ProFrotasFilesStepProps {
   sheets: LoadedSheet[]
+  conversions: Record<string, string>
   sources: LoadedXmlSource[]
   companies: CompanyOption[]
+  recipients: Recipient[]
   settings: SettingsDraft
   progress: Progress | null
   sheetErrors: string[]
   xmlErrors: string[]
   onSheetFiles: (files: File[]) => void
   onXmlFiles: (files: File[], origin: LoadedXmlSource['origin']) => void
+  onLayout: (id: string, change: LayoutChange) => void
+  onConversion: (from: string, to: string | null) => void
   onRemoveSheet: (id: string) => void
   onRemoveSource: (id: string) => void
   onSettings: (patch: Partial<SettingsDraft>) => void
@@ -24,7 +30,7 @@ const card = 'bg-white dark:bg-slate-900 border border-gray-200 dark:border-slat
 const input = 'bg-white dark:bg-slate-900 mt-1 block px-3 py-1.5 text-sm text-gray-800 dark:text-slate-200 border border-gray-300 dark:border-slate-600 rounded-lg'
 
 export default function ProFrotasFilesStep(props: ProFrotasFilesStepProps) {
-  const { sheets, sources, settings, progress } = props
+  const { sheets, sources, settings, progress, conversions } = props
   const receita = sources.filter((s) => s.origin === 'receita')
   const pendentes = sources.filter((s) => s.origin === 'pendentes')
   const xmlCount = sources.reduce((n, s) => n + s.entries.length, 0)
@@ -32,11 +38,20 @@ export default function ProFrotasFilesStep(props: ProFrotasFilesStepProps) {
   const blockers: string[] = []
   if (progress) blockers.push('Aguarde a leitura dos arquivos.')
   if (sheets.length === 0) blockers.push('Envie a planilha da Pro Frotas.')
+  const unmapped = sheets.find((s) => missingRequired(s.layout.mapping).length > 0)
+  if (unmapped) blockers.push(`Escolha as colunas obrigatórias de ${unmapped.fileName}.`)
   if (xmlCount === 0) blockers.push('Envie os XMLs da Receita.')
   if (!settings.companyCnpj) blockers.push('Escolha a empresa.')
   if (!settings.periodEnd) blockers.push('Informe a data final do período.')
   if (!(settings.maxDays > 0)) blockers.push('O prazo máximo precisa ser maior que zero.')
   if (!(settings.tolerance >= 0)) blockers.push('A tolerância não pode ser negativa.')
+
+  // Destinatário das notas × empresa escolhida: sem nenhum XML para ela, o CNPJ da planilha precisa de conversão
+  const selectedRecipient = props.recipients.find((r) => r.cnpj === settings.companyCnpj)
+  const otherRecipients = props.recipients.filter((r) => r.cnpj !== settings.companyCnpj).slice(0, 3)
+  const convertedFrom = Object.keys(conversions).filter((from) => conversions[from] === settings.companyCnpj)
+  // CNPJ como está na planilha, antes de qualquer conversão para a empresa escolhida
+  const sheetCnpj = convertedFrom[0] ?? settings.companyCnpj
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -51,14 +66,25 @@ export default function ProFrotasFilesStep(props: ProFrotasFilesStepProps) {
       <section className={card}>
         <StepTitle n={1} title="Planilha da Pro Frotas" />
         <p className="text-xs text-gray-500 dark:text-slate-400 mb-4">
-          "Relatório Detalhamento da Cobrança". As colunas são achadas pelo título: Data Abastecimento, CNPJ do Posto, CNPJ da Empresa, Valor no Boleto e Número da Nota Fiscal.
+          "Relatório Detalhamento da Cobrança". As colunas vêm pré-selecionadas pelo título e podem ser trocadas em "Colunas e CNPJ", onde também dá para converter o CNPJ da Empresa.
+          Lançamento com Postergado = Sim fica de fora do cálculo.
         </p>
         <DropZone accept=".xlsx,.xls" hint=".xlsx / .xls · até 30 MB" multiple onFiles={props.onSheetFiles} />
         <Errors errors={props.sheetErrors} />
-        <FileList
-          items={sheets.map((s) => ({ id: s.id, name: s.fileName, detail: `${s.lines.length.toLocaleString('pt-BR')} lançamento(s)` }))}
-          onRemove={props.onRemoveSheet}
-        />
+        {sheets.length > 0 && (
+          <ul className="mt-4 divide-y divide-gray-100 dark:divide-slate-800 border border-gray-100 dark:border-slate-800 rounded-lg">
+            {sheets.map((s) => (
+              <SheetSetup
+                key={s.id}
+                sheet={s}
+                conversions={conversions}
+                onLayout={(change) => props.onLayout(s.id, change)}
+                onConversion={props.onConversion}
+                onRemove={() => props.onRemoveSheet(s.id)}
+              />
+            ))}
+          </ul>
+        )}
       </section>
 
       {/* ── XMLs da Receita ──────────────────────────────────────────────── */}
@@ -104,6 +130,16 @@ export default function ProFrotasFilesStep(props: ProFrotasFilesStepProps) {
               </option>
             ))}
           </select>
+          {convertedFrom.length > 0 && (
+            <span className="mt-1 block text-[11px] text-violet-700 dark:text-violet-300">
+              Convertido de {convertedFrom.map(formatCnpj).join(', ')}, como está na planilha
+            </span>
+          )}
+          {selectedRecipient && (
+            <span className="mt-1 block text-[11px] text-emerald-700 dark:text-emerald-400">
+              {selectedRecipient.notes.toLocaleString('pt-BR')} NF-e dos XMLs são para este CNPJ
+            </span>
+          )}
         </label>
         <label className="text-xs text-gray-500 dark:text-slate-400">
           Data final do período
@@ -135,6 +171,28 @@ export default function ProFrotasFilesStep(props: ProFrotasFilesStepProps) {
             className={`${input} w-28`}
           />
         </label>
+        {settings.companyCnpj && !selectedRecipient && otherRecipients.length > 0 && (
+          <div className="w-full p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl text-xs text-amber-900 dark:text-amber-200" role="alert">
+            <p className="font-semibold">Nenhuma NF-e dos XMLs enviados é para o CNPJ {formatCnpj(settings.companyCnpj)}.</p>
+            <p className="mt-0.5">Se as notas saem para outro CNPJ, converta o CNPJ da Empresa da planilha. Os XMLs são para:</p>
+            <ul className="mt-2 space-y-1">
+              {otherRecipients.map((r) => (
+                <li key={r.cnpj} className="flex flex-wrap items-center gap-2">
+                  <span className="tabular-nums font-medium">{formatCnpj(r.cnpj)}</span>
+                  <span>
+                    {r.name} · {r.notes.toLocaleString('pt-BR')} NF-e
+                  </span>
+                  <button
+                    onClick={() => props.onConversion(sheetCnpj, r.cnpj)}
+                    className="px-2 py-0.5 font-semibold text-violet-700 dark:text-violet-300 border border-violet-300 dark:border-violet-500/40 rounded-md hover:bg-violet-50 dark:hover:bg-violet-500/15"
+                  >
+                    {r.cnpj === sheetCnpj ? 'Usar o CNPJ da planilha' : `Converter ${formatCnpj(sheetCnpj)} → ${formatCnpj(r.cnpj)}`}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <p className="text-xs text-gray-400 dark:text-slate-500 w-full">
           A data final vem do último abastecimento da planilha. Nota emitida mais de {settings.maxDays || '—'} dias depois do abastecimento é desconsiderada;
           XML sem par fica pendente até passar desse prazo, contado da data final.

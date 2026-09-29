@@ -1,3 +1,4 @@
+import { normalizeCnpj } from './cnpj'
 import type { XmlItem, XmlNote } from '../../types/proFrotas'
 
 /**
@@ -87,9 +88,9 @@ export function parseNfeXml(content: string, fileName: string): XmlReadResult {
       series: text(ide, 'serie'),
       type: Number(text(ide, 'tpNF') || 0),
       issueDate: isoDay(text(ide, 'dhEmi') || text(ide, 'dEmi')),
-      issuerCnpj: (text(emit, 'CNPJ') || text(emit, 'CPF')).replace(/\D/g, ''),
+      issuerCnpj: normalizeCnpj(text(emit, 'CNPJ') || text(emit, 'CPF')),
       issuerName: text(emit, 'xNome'),
-      recipientCnpj: (text(dest, 'CNPJ') || text(dest, 'CPF')).replace(/\D/g, ''),
+      recipientCnpj: normalizeCnpj(text(dest, 'CNPJ') || text(dest, 'CPF')),
       recipientName: text(dest, 'xNome'),
       amount,
       fileName,
