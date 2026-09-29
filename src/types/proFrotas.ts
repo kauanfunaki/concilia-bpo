@@ -61,16 +61,26 @@ export interface XmlNote {
   amount: number
   fileName: string
   items: XmlItem[]
+  // Cancelamento homologado, quando o evento vem no próprio arquivo (o NFeLog do portal do PR traz)
+  cancelled: boolean
+  cancelledAt: string | null
 }
 
-export type Category = 'identical' | 'divergentGroup' | 'divergent' | 'notFound' | 'disregarded'
+/** Evento de cancelamento em arquivo próprio (procEventoNFe), como vem de outros portais */
+export interface CancellationEvent {
+  key: string
+  date: string | null
+}
 
-export const CATEGORIES: Category[] = ['identical', 'divergentGroup', 'divergent', 'notFound', 'disregarded']
+export type Category = 'identical' | 'divergentGroup' | 'divergent' | 'cancelled' | 'notFound' | 'disregarded'
+
+export const CATEGORIES: Category[] = ['identical', 'divergentGroup', 'divergent', 'cancelled', 'notFound', 'disregarded']
 
 export const CATEGORY_LABEL: Record<Category, string> = {
   identical: 'Idênticas',
   divergentGroup: 'Divergentes agrupadas',
   divergent: 'Divergentes',
+  cancelled: 'Canceladas',
   notFound: 'Não encontradas',
   disregarded: 'Desconsideradas',
 }
@@ -88,6 +98,8 @@ export interface ResultNote {
   days: number | null
   // Número sequencial do grupo no relatório (só nas agrupadas)
   groupNumber: number | null
+  // Data do cancelamento da NF-e casada (só nas canceladas)
+  cancelledAt: string | null
   note: string
 }
 
@@ -104,6 +116,8 @@ export interface ValidationSettings {
   tolerance: number
   // Só para registro: as linhas da planilha já chegam convertidas ao motor
   cnpjConversions?: CnpjConversion[]
+  // Notas emitidas para outro CNPJ (caso ocasional): entram no confronto, mas não viram pendentes
+  extraRecipients?: string[]
 }
 
 export interface ValidationStats {
@@ -118,6 +132,10 @@ export interface ValidationStats {
   xmlDuplicates: number
   xmlInbound: number
   xmlOtherRecipient: number
+  // NF-e canceladas que não casaram com a planilha: saem sem virar pendente
+  xmlCancelled: number
+  // Notas para o outro CNPJ que não casaram com a planilha: também não viram pendentes
+  xmlOtherCnpjUnused: number
 }
 
 export interface ValidationResult {

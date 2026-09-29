@@ -38,6 +38,8 @@ function xml(number: string, amount: number, issueDate = '2026-09-12'): XmlNote 
     amount,
     fileName: `${number}.xml`,
     items: [],
+    cancelled: false,
+    cancelledAt: null,
   }
 }
 
@@ -61,6 +63,7 @@ describe('buildProFrotasWorkbook', () => {
       'NFe Idênticas',
       'NFe Divergentes Agrupadas',
       'NFe Divergentes',
+      'NFe Canceladas',
       'NFe Não Encontradas',
       'NFe Desconsideradas',
     ])

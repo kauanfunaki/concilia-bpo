@@ -33,6 +33,8 @@ describe('parseNfeXml', () => {
         recipientName: 'TRANSPORTADORA EXEMPLO LTDA',
         amount: 250.75,
         fileName: `${KEY}.xml`,
+        cancelled: false,
+        cancelledAt: null,
         items: [
           { description: 'OLEO DIESEL S10', quantity: 40, unit: 'L', unitPrice: 6.15, total: 246 },
           { description: 'ARLA 32', quantity: 1, unit: 'L', unitPrice: 4.75, total: 4.75 },
@@ -62,6 +64,34 @@ describe('parseNfeXml', () => {
 
   it('NF-e sem valor total é erro', () => {
     expect(parseNfeXml(receitaXml({ vNF: '' }), 'x.xml')).toEqual({ kind: 'error', message: 'NF-e sem valor total (vNF)' })
+  })
+})
+
+// Como o NFeLog do portal do PR traz o cancelamento: evento + resposta da SEFAZ no mesmo arquivo
+function retEvento(tpEvento: string, cStat: string, key = KEY): string {
+  return `<retEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><infEvento><cStat>${cStat}</cStat><chNFe>${key}</chNFe><tpEvento>${tpEvento}</tpEvento><dhRegEvento>2026-09-13T10:00:00-03:00</dhRegEvento></infEvento></retEvento>`
+}
+
+describe('cancelamento', () => {
+  it('evento no próprio NFeLog marca a nota como cancelada', () => {
+    const xml = receitaXml().replace('</procNFe></NFeLog>', `</procNFe><eveNFe>${retEvento('110111', '135')}</eveNFe></NFeLog>`)
+    expect(parseNfeXml(xml, 'a.xml')).toMatchObject({ kind: 'nfe', note: { cancelled: true, cancelledAt: '2026-09-13' } })
+  })
+
+  it('cancelamento rejeitado pela SEFAZ não conta', () => {
+    const xml = receitaXml().replace('</procNFe></NFeLog>', `</procNFe><eveNFe>${retEvento('110111', '573')}</eveNFe></NFeLog>`)
+    expect(parseNfeXml(xml, 'a.xml')).toMatchObject({ kind: 'nfe', note: { cancelled: false, cancelledAt: null } })
+  })
+
+  it('procEventoNFe de cancelamento em arquivo à parte', () => {
+    expect(parseNfeXml(`<procEventoNFe>${retEvento('110111', '155')}</procEventoNFe>`, 'ev.xml')).toEqual({
+      kind: 'cancellation',
+      event: { key: KEY, date: '2026-09-13' },
+    })
+  })
+
+  it('ciência da operação é outro evento qualquer', () => {
+    expect(parseNfeXml(`<procEventoNFe>${retEvento('210210', '135')}</procEventoNFe>`, 'ev.xml')).toEqual({ kind: 'other' })
   })
 })
 

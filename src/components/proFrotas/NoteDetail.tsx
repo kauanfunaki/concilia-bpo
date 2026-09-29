@@ -84,7 +84,19 @@ export default function NoteDetail({ note, result, onClose }: NoteDetailProps) {
           </section>
         </div>
 
-        {note.difference !== null && note.difference !== 0 && (
+        {note.category === 'cancelled' && (
+          <p className="mx-5 mb-4 text-sm font-semibold text-fuchsia-800 dark:text-fuchsia-200 bg-fuchsia-50 dark:bg-fuchsia-500/10 rounded-lg px-3 py-2">
+            NF-e cancelada{note.cancelledAt ? ` em ${formatDateBR(note.cancelledAt)}` : ''}: o posto cancelou a nota, então ela não comprova esta cobrança.
+          </p>
+        )}
+
+        {xml && xml.recipientCnpj !== result.settings.companyCnpj && (
+          <p className="mx-5 mb-4 text-sm font-semibold text-sky-800 dark:text-sky-200 bg-sky-50 dark:bg-sky-500/10 rounded-lg px-3 py-2">
+            Emitida para outro CNPJ: {xml.recipientName} · {formatCnpj(xml.recipientCnpj)}
+          </p>
+        )}
+
+        {note.category !== 'cancelled' && note.difference !== null && note.difference !== 0 && (
           <p className="mx-5 mb-4 text-sm font-semibold text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-3 py-2">
             Diferença (XML − planilha): {formatMoney(note.difference)}
           </p>

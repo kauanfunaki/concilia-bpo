@@ -6,7 +6,7 @@ import { zipXmlFiles } from '../../core/proFrotas/archive'
 import { formatCnpj } from '../../core/proFrotas/cnpj'
 import { downloadBlob, downloadProFrotasReport, zipFileName } from '../../core/proFrotas/report'
 import { formatDateBR, formatMoney } from '../../core/bankReconciliation/money'
-import { CATEGORY_LABEL } from '../../types/proFrotas'
+import { CATEGORIES, CATEGORY_LABEL } from '../../types/proFrotas'
 import type { Category, ResultNote, ValidationResult, XmlNote } from '../../types/proFrotas'
 
 interface ProFrotasResultStepProps {
@@ -17,7 +17,7 @@ interface ProFrotasResultStepProps {
 }
 
 // Ordem da tela: o que pede atenção primeiro
-const SCREEN_ORDER: Category[] = ['divergentGroup', 'divergent', 'notFound', 'disregarded', 'identical']
+const SCREEN_ORDER: Category[] = ['divergentGroup', 'divergent', 'cancelled', 'notFound', 'disregarded', 'identical']
 
 const PAGE = 200
 
@@ -47,7 +47,7 @@ export default function ProFrotasResultStep({ result, sources, onBack, onReset }
     const xmlsOf = (cats: Category[]) => cats.flatMap((c) => byCategory[c]).map((n) => n.xml).filter((x): x is XmlNote => x !== null)
     return {
       conciliados: xmlsOf(['identical', 'divergentGroup', 'divergent']),
-      conferencia: xmlsOf(['divergentGroup', 'divergent', 'disregarded']),
+      conferencia: xmlsOf(['divergentGroup', 'divergent', 'cancelled', 'disregarded']),
       pendentes: result.pending,
     }
   }, [byCategory, result])
@@ -90,6 +90,8 @@ export default function ProFrotasResultStep({ result, sources, onBack, onReset }
   }
 
   const { settings, stats } = result
+  const otherCnpjNotes = result.notes.filter((n) => n.xml && n.xml.recipientCnpj !== settings.companyCnpj).length
+  const showOtherCnpjHint = byCategory.notFound.length > 0 && !(settings.extraRecipients?.length ?? 0)
 
   return (
     <div className="max-w-full">
@@ -104,6 +106,11 @@ export default function ProFrotasResultStep({ result, sources, onBack, onReset }
               CNPJ da Empresa na planilha ({formatCnpj(c.from)}) convertido para {formatCnpj(c.to)}
             </p>
           ))}
+          {otherCnpjNotes > 0 && (
+            <p className="text-xs font-medium text-sky-700 dark:text-sky-300 mt-0.5">
+              {otherCnpjNotes.toLocaleString('pt-BR')} nota(s) emitida(s) para outro CNPJ ({settings.extraRecipients?.map(formatCnpj).join(', ')})
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={onBack} className={secondaryButton}>← Arquivos</button>
@@ -149,8 +156,8 @@ export default function ProFrotasResultStep({ result, sources, onBack, onReset }
       )}
 
       {/* Resumo por situação */}
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-5 mb-5">
-        {(['identical', 'divergentGroup', 'divergent', 'notFound', 'disregarded'] as Category[]).map((c) => {
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-6 mb-5">
+        {CATEGORIES.map((c) => {
           const notes = byCategory[c]
           const total = notes.reduce((s, n) => s + n.sheetAmount, 0)
           const active = filter === c
@@ -177,6 +184,16 @@ export default function ProFrotasResultStep({ result, sources, onBack, onReset }
         })}
       </div>
 
+      {showOtherCnpjHint && (
+        <p className="mb-5 text-xs text-gray-500 dark:text-slate-400">
+          Nota emitida para outro CNPJ aparece como não encontrada. Se for o caso, volte em{' '}
+          <button onClick={onBack} className="font-semibold text-blue-700 dark:text-blue-400 hover:underline">
+            Arquivos
+          </button>
+          , marque "Há notas emitidas para outro CNPJ" e envie os XMLs desse CNPJ.
+        </p>
+      )}
+
       {/* XMLs e o que ficou de fora */}
       <div className="grid gap-4 lg:grid-cols-2 mb-5">
         <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-sm p-4">
@@ -192,7 +209,7 @@ export default function ProFrotasResultStep({ result, sources, onBack, onReset }
             />
             <ZipRow
               label="Para conferência"
-              detail="Divergentes e desconsideradas, para abrir a nota"
+              detail="Divergentes, canceladas e desconsideradas, para abrir a nota"
               count={zipNotes.conferencia.length}
               busy={busy === 'conferencia'}
               disabled={busy !== null}
@@ -214,6 +231,8 @@ export default function ProFrotasResultStep({ result, sources, onBack, onReset }
             <Stat label="De entrada (tpNF 0)" value={stats.xmlInbound} muted />
             <Stat label="Para outro destinatário" value={stats.xmlOtherRecipient} muted />
             <Stat label={`Sem par, passaram de ${settings.maxDays} dias`} value={result.expired.length} muted />
+            <Stat label="Canceladas, sem par na planilha" value={stats.xmlCancelled} muted />
+            {(settings.extraRecipients?.length ?? 0) > 0 && <Stat label="De outro CNPJ, sem par na planilha" value={stats.xmlOtherCnpjUnused} muted />}
           </dl>
         </div>
       </div>

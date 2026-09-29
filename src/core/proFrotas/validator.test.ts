@@ -40,6 +40,8 @@ function xml(number: string, amount: number, overrides: Partial<XmlNote> = {}): 
     amount,
     fileName: `${seq}.xml`,
     items: [],
+    cancelled: false,
+    cancelledAt: null,
     ...overrides,
   }
 }
@@ -217,6 +219,73 @@ describe('validateProFrotas', () => {
     expect(byNumber(result, '95').category).toBe('identical')
     expect(result.pending).toEqual([])
     expect(result.stats.xmlDuplicates).toBe(1)
+  })
+})
+
+describe('notas emitidas para outro CNPJ', () => {
+  const OUTRO = '09456428000118'
+
+  it('sem a opção, a nota para outro CNPJ não entra e a da planilha fica não encontrada', () => {
+    const result = run([line('NFe300', 80)], [xml('300', 80, { recipientCnpj: OUTRO })])
+    expect(byNumber(result, '300').category).toBe('notFound')
+    expect(result.stats.xmlOtherRecipient).toBe(1)
+  })
+
+  it('com o CNPJ extra, a nota casa e sai marcada com o CNPJ para o qual foi emitida', () => {
+    const result = run([line('NFe301', 80)], [xml('301', 80, { recipientCnpj: OUTRO })], { extraRecipients: [OUTRO] })
+    expect(byNumber(result, '301')).toMatchObject({ category: 'identical', note: 'Emitida para outro CNPJ: 09.456.428/0001-18' })
+  })
+
+  it('nota do outro CNPJ que não casa não vira pendente', () => {
+    const own = xml('302', 10)
+    const result = run([], [own, xml('303', 10, { recipientCnpj: OUTRO })], { extraRecipients: [OUTRO] })
+    expect(result.pending).toEqual([own])
+    expect(result.stats.xmlOtherCnpjUnused).toBe(1)
+  })
+})
+
+describe('NF-e cancelada', () => {
+  it('cancelamento no próprio arquivo: a nota sai como cancelada, não como idêntica', () => {
+    const result = run([line('NFe400', 50)], [xml('400', 50, { cancelled: true, cancelledAt: '2026-09-13' })])
+    expect(byNumber(result, '400')).toMatchObject({ category: 'cancelled', cancelledAt: '2026-09-13', note: 'NF-e cancelada em 13/09/2026' })
+  })
+
+  it('cancelamento em arquivo à parte vale pela chave', () => {
+    const nota = xml('401', 50)
+    const result = validateProFrotas([line('NFe401', 50)], [nota], SETTINGS, [{ key: nota.key, date: '2026-09-14' }])
+    expect(byNumber(result, '401')).toMatchObject({ category: 'cancelled', cancelledAt: '2026-09-14' })
+  })
+
+  it('basta uma cópia da nota trazer o cancelamento (ZIP baixado depois do cancelamento)', () => {
+    const antes = xml('402', 50)
+    const depois = { ...antes, fileName: 'outro.xml', cancelled: true, cancelledAt: '2026-09-14' }
+    expect(byNumber(run([line('NFe402', 50)], [antes, depois]), '402').category).toBe('cancelled')
+  })
+
+  it('com duas séries, a nota válida ganha da cancelada', () => {
+    const cancelada = xml('403', 50, { series: '1', cancelled: true, cancelledAt: '2026-09-13' })
+    const valida = xml('403', 50, { series: '2' })
+    const result = run([line('NFe403', 50, { series: '' })], [cancelada, valida])
+    expect(byNumber(result, '403')).toMatchObject({ category: 'identical', xml: valida })
+    expect(result.pending).toEqual([])
+    expect(result.stats.xmlCancelled).toBe(1)
+  })
+
+  it('grupo com nota cancelada não vale pela soma: cada nota segue sozinha', () => {
+    const result = run([line('NFe410, NFe411', 100)], [xml('410', 60, { cancelled: true, cancelledAt: '2026-09-13' }), xml('411', 40)])
+    expect(byNumber(result, '410').category).toBe('cancelled')
+    expect(byNumber(result, '411')).toMatchObject({ category: 'divergent', sheetAmount: 0, xmlAmount: 40 })
+  })
+
+  it('cancelada continua cancelada mesmo emitida depois do prazo', () => {
+    const result = run([line('NFe420', 10, { fuelDate: '2026-06-01' })], [xml('420', 10, { issueDate: '2026-08-15', cancelled: true, cancelledAt: '2026-08-16' })])
+    expect(byNumber(result, '420').category).toBe('cancelled')
+  })
+
+  it('cancelada sem par não vira pendente', () => {
+    const result = run([], [xml('430', 10, { cancelled: true, cancelledAt: '2026-09-13' })])
+    expect(result.pending).toEqual([])
+    expect(result.stats.xmlCancelled).toBe(1)
   })
 })
 
