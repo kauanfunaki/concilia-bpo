@@ -1,6 +1,7 @@
 import { useReducer, useState } from 'react'
 import Uploader from './components/Uploader'
 import BankReconciliation from './components/bank/BankReconciliation'
+import ProFrotasValidation from './components/proFrotas/ProFrotasValidation'
 import ThemeToggle from './components/ThemeToggle'
 import SheetConfig from './components/SheetConfig'
 import ReportTable from './components/ReportTable'
@@ -51,13 +52,20 @@ function reducer(state: AppState, action: Action): AppState {
   }
 }
 
-type AppMode = 'bases' | 'bank'
+type AppMode = 'bases' | 'bank' | 'profrotas'
+
+const MODES: [AppMode, string, string][] = [
+  ['bases', 'Bases Excel', 'Conciliação de Bases Excel'],
+  ['bank', 'Bancária', 'Conciliação bancária: sistema × extrato'],
+  ['profrotas', 'Pro Frotas', 'Validação Pro Frotas: planilha × XMLs da Receita'],
+]
 
 const MODE_STORAGE_KEY = 'conciliador-bpo:modo'
 
 function readMode(): AppMode {
   try {
-    return localStorage.getItem(MODE_STORAGE_KEY) === 'bank' ? 'bank' : 'bases'
+    const saved = localStorage.getItem(MODE_STORAGE_KEY)
+    return MODES.some(([value]) => value === saved) ? (saved as AppMode) : 'bases'
   } catch {
     return 'bases'
   }
@@ -107,11 +115,11 @@ export default function App() {
         <div>
           <h1 className="text-sm font-bold text-gray-900 dark:text-slate-100 leading-tight">Conciliador BPO</h1>
           <p className="text-xs text-gray-400 dark:text-slate-500">
-            {mode === 'bank' ? 'Conciliação bancária: sistema × extrato' : 'Conciliação de Bases Excel'}
+            {MODES.find(([value]) => value === mode)?.[2]}
           </p>
         </div>
         <nav className="ml-auto flex rounded-lg bg-gray-100 dark:bg-slate-800 p-1" aria-label="Tipo de conciliação">
-          {([['bases', 'Bases Excel'], ['bank', 'Bancária']] as const).map(([value, label]) => (
+          {MODES.map(([value, label]) => (
             <button
               key={value}
               onClick={() => handleMode(value)}
@@ -128,9 +136,13 @@ export default function App() {
         <ThemeToggle />
       </header>
 
-      {/* Os dois modos ficam montados: trocar de aba não perde os arquivos carregados */}
+      {/* Os modos ficam montados: trocar de aba não perde os arquivos carregados */}
       <main hidden={mode !== 'bank'} className="max-w-7xl mx-auto px-6 py-10">
         <BankReconciliation />
+      </main>
+
+      <main hidden={mode !== 'profrotas'} className="max-w-7xl mx-auto px-6 py-10">
+        <ProFrotasValidation />
       </main>
 
       <main hidden={mode !== 'bases'} className="max-w-5xl mx-auto px-6 py-10">
