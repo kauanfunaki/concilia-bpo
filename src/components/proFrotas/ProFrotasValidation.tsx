@@ -14,7 +14,7 @@ import {
 import type { Field, PreferredTitles, ProFrotasSheet, SheetLayout } from '../../core/proFrotas/sheet'
 import { DEFAULT_MAX_DAYS, DEFAULT_TOLERANCE, detectCompanies, suggestPeriodEnd, validateProFrotas } from '../../core/proFrotas/validator'
 import { decodeXml, parseNfeXml } from '../../core/proFrotas/xml'
-import type { CnpjConversion, SheetLine, ValidationResult, XmlNote } from '../../types/proFrotas'
+import type { CancellationEvent, CnpjConversion, SheetLine, ValidationResult, XmlNote } from '../../types/proFrotas'
 
 const MAX_SHEET_BYTES = 30 * 1024 * 1024
 const MAX_ZIP_BYTES = 400 * 1024 * 1024
@@ -42,9 +42,12 @@ export interface LoadedXmlSource {
   id: string
   fileName: string
   size: number
-  // Pendentes: o ZIP que esta aba gerou no período anterior
-  origin: 'receita' | 'pendentes'
+  // Pendentes: o ZIP que esta aba gerou no período anterior; outroCnpj: notas emitidas para outro
+  // CNPJ (caso ocasional), que entram no confronto sem virar pendente
+  origin: 'receita' | 'pendentes' | 'outroCnpj'
   entries: XmlEntry[]
+  // Cancelamentos em arquivo próprio (procEventoNFe)
+  cancellations: CancellationEvent[]
   others: number
   errors: { file: string; message: string }[]
 }
@@ -102,6 +105,19 @@ function readLines(workbook: ProFrotasSheet[], layout: SheetLayout, fileName: st
   return parseSheetLines(workbook[layout.sheetIndex], layout.headerIndex, layout.mapping, fileName)
 }
 
+function recipientsOf(sources: LoadedXmlSource[]): Recipient[] {
+  const byCnpj = new Map<string, Recipient>()
+  for (const s of sources) {
+    for (const { note } of s.entries) {
+      if (note.type !== 1) continue
+      const r = byCnpj.get(note.recipientCnpj) ?? { cnpj: note.recipientCnpj, name: note.recipientName, notes: 0 }
+      r.notes++
+      byCnpj.set(note.recipientCnpj, r)
+    }
+  }
+  return [...byCnpj.values()].sort((a, b) => b.notes - a.notes)
+}
+
 /** Linhas com o CNPJ da Empresa já convertido para o destinatário das notas */
 function convertLines(lines: SheetLine[], conversions: Record<string, string>): SheetLine[] {
   return lines.map((l) => (conversions[l.companyCnpj] ? { ...l, companyCnpj: conversions[l.companyCnpj] } : l))
@@ -117,23 +133,18 @@ export default function ProFrotasValidation() {
   const [progress, setProgress] = useState<Progress | null>(null)
   const [sheetErrors, setSheetErrors] = useState<string[]>([])
   const [xmlErrors, setXmlErrors] = useState<string[]>([])
+  const [otherCnpjOpen, setOtherCnpjOpen] = useState(false)
 
   const lines = useMemo(() => convertLines(sheets.flatMap((s) => s.lines), conversions), [sheets, conversions])
   const companies = useMemo(() => detectCompanies(lines), [lines])
 
-  // Destinatários das notas de saída enviadas: é por eles que se descobre um CNPJ a converter
-  const recipients = useMemo(() => {
-    const byCnpj = new Map<string, Recipient>()
-    for (const s of sources) {
-      for (const { note } of s.entries) {
-        if (note.type !== 1) continue
-        const r = byCnpj.get(note.recipientCnpj) ?? { cnpj: note.recipientCnpj, name: note.recipientName, notes: 0 }
-        r.notes++
-        byCnpj.set(note.recipientCnpj, r)
-      }
-    }
-    return [...byCnpj.values()].sort((a, b) => b.notes - a.notes)
-  }, [sources])
+  // Destinatários das notas de saída: pelos da Receita se descobre um CNPJ a converter; pelos do
+  // "outro CNPJ", quais destinatários extras entram no confronto
+  const recipients = useMemo(() => recipientsOf(sources.filter((s) => s.origin !== 'outroCnpj')), [sources])
+  const otherRecipients = useMemo(
+    () => recipientsOf(sources.filter((s) => s.origin === 'outroCnpj')).filter((r) => r.cnpj !== settings.companyCnpj),
+    [sources, settings.companyCnpj]
+  )
 
   // O botão Validar fica no fim da página: sem isso o resultado abria no meio da tabela
   useEffect(() => {
@@ -233,13 +244,23 @@ export default function ProFrotasValidation() {
         const xmlFiles = extractXmlFiles(new Uint8Array(await readAsArrayBuffer(file)), file.name)
         if (xmlFiles.length === 0) throw new Error(ext === '.zip' ? 'o ZIP não tem nenhum XML.' : 'arquivo vazio.')
 
-        const source: LoadedXmlSource = { id: crypto.randomUUID(), fileName: file.name, size: file.size, origin, entries: [], others: 0, errors: [] }
+        const source: LoadedXmlSource = {
+          id: crypto.randomUUID(),
+          fileName: file.name,
+          size: file.size,
+          origin,
+          entries: [],
+          cancellations: [],
+          others: 0,
+          errors: [],
+        }
         for (let i = 0; i < xmlFiles.length; i += PARSE_CHUNK) {
           setProgress({ label: `Lendo XMLs de ${file.name}`, done: i, total: xmlFiles.length })
           await yieldToBrowser()
           for (const xmlFile of xmlFiles.slice(i, i + PARSE_CHUNK)) {
             const read = parseNfeXml(decodeXml(xmlFile.bytes), xmlFile.name)
             if (read.kind === 'nfe') source.entries.push({ note: read.note, bytes: xmlFile.bytes })
+            else if (read.kind === 'cancellation') source.cancellations.push(read.event)
             else if (read.kind === 'other') source.others++
             else source.errors.push({ file: xmlFile.name, message: read.message })
           }
@@ -260,13 +281,19 @@ export default function ProFrotasValidation() {
     const xmls = sources.flatMap((s) => s.entries.map((e) => e.note))
     const cnpjConversions: CnpjConversion[] = Object.entries(conversions).map(([from, to]) => ({ from, to }))
     setResult(
-      validateProFrotas(lines, xmls, {
-        companyCnpj: settings.companyCnpj,
-        periodEnd: settings.periodEnd,
-        maxDays: settings.maxDays,
-        tolerance: settings.tolerance,
-        cnpjConversions: cnpjConversions.filter((c) => c.to === settings.companyCnpj),
-      })
+      validateProFrotas(
+        lines,
+        xmls,
+        {
+          companyCnpj: settings.companyCnpj,
+          periodEnd: settings.periodEnd,
+          maxDays: settings.maxDays,
+          tolerance: settings.tolerance,
+          cnpjConversions: cnpjConversions.filter((c) => c.to === settings.companyCnpj),
+          extraRecipients: otherRecipients.map((r) => r.cnpj),
+        },
+        sources.flatMap((s) => s.cancellations)
+      )
     )
     setStep('result')
   }
@@ -279,7 +306,17 @@ export default function ProFrotasValidation() {
     setResult(null)
     setSheetErrors([])
     setXmlErrors([])
+    setOtherCnpjOpen(false)
     setStep('files')
+  }
+
+  // Desmarcar "notas para outro CNPJ" tira os XMLs desse CNPJ da validação
+  function handleOtherCnpj(open: boolean) {
+    setOtherCnpjOpen(open)
+    if (!open && sources.some((s) => s.origin === 'outroCnpj')) {
+      setSources((prev) => prev.filter((s) => s.origin !== 'outroCnpj'))
+      setResult(null)
+    }
   }
 
   if (step === 'result' && result) {
@@ -293,6 +330,9 @@ export default function ProFrotasValidation() {
       sources={sources}
       companies={companies}
       recipients={recipients}
+      otherCnpjOpen={otherCnpjOpen || sources.some((s) => s.origin === 'outroCnpj')}
+      otherRecipients={otherRecipients}
+      onOtherCnpj={handleOtherCnpj}
       settings={settings}
       progress={progress}
       sheetErrors={sheetErrors}

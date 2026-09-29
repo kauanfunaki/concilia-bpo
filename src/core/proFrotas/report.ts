@@ -69,7 +69,9 @@ const fuelDate: Column = { header: 'Data Abastecimento', width: 17, kind: 'date'
 const days: Column = { header: 'Dias Postergados', width: 15, kind: 'integer', value: (n) => n.days }
 const issuer: Column = { header: 'CNPJ Emitente', width: 21, kind: 'text', value: (n) => formatCnpj(n.sheet.stationCnpj) }
 const station: Column = { header: 'Posto', width: 36, kind: 'text', value: (n) => n.xml?.issuerName || n.sheet.stationName || null }
-const recipient: Column = { header: 'CNPJ Destinatário', width: 21, kind: 'text', value: (n) => formatCnpj(n.sheet.companyCnpj) }
+// O destinatário é o do XML: a nota pode ter saído para outro CNPJ
+const recipient: Column = { header: 'CNPJ Destinatário', width: 21, kind: 'text', value: (n) => formatCnpj(n.xml?.recipientCnpj || n.sheet.companyCnpj) }
+const cancelDate: Column = { header: 'Data Cancelamento', width: 17, kind: 'date', value: (n) => isoToDate(n.cancelledAt) }
 const xmlAmount = (header: string): Column => ({ header, width: 15, kind: 'money', sum: true, value: (n) => n.xmlAmount })
 const sheetAmount = (header: string): Column => ({ header, width: 15, kind: 'money', sum: true, value: (n) => n.sheetAmount })
 const difference: Column = { header: 'Diferença', width: 14, kind: 'diff', sum: true, value: () => null }
@@ -95,6 +97,13 @@ export const REPORT_SHEETS: SheetSpec[] = [
     name: 'NFe Divergentes',
     title: 'NOTAS DIVERGENTES SEM GRUPO',
     columns: [number, fuelDate, issuer, station, recipient, xmlAmount('Valor XML'), sheetAmount('Valor Planilha'), difference, sources, accessKey, remark],
+  },
+  {
+    // Aba nova: o app antigo não lia o evento de cancelamento e dava essas notas como idênticas ou divergentes
+    category: 'cancelled',
+    name: 'NFe Canceladas',
+    title: 'NOTAS CANCELADAS (NF-e COM CANCELAMENTO HOMOLOGADO)',
+    columns: [number, issueDate('Data de Emissão'), cancelDate, fuelDate, issuer, station, recipient, xmlAmount('Valor XML'), sheetAmount('Valor Planilha'), sources, accessKey, remark],
   },
   {
     category: 'notFound',

@@ -11,6 +11,9 @@ interface ProFrotasFilesStepProps {
   sources: LoadedXmlSource[]
   companies: CompanyOption[]
   recipients: Recipient[]
+  otherCnpjOpen: boolean
+  otherRecipients: Recipient[]
+  onOtherCnpj: (open: boolean) => void
   settings: SettingsDraft
   progress: Progress | null
   sheetErrors: string[]
@@ -33,6 +36,7 @@ export default function ProFrotasFilesStep(props: ProFrotasFilesStepProps) {
   const { sheets, sources, settings, progress, conversions } = props
   const receita = sources.filter((s) => s.origin === 'receita')
   const pendentes = sources.filter((s) => s.origin === 'pendentes')
+  const outroCnpj = sources.filter((s) => s.origin === 'outroCnpj')
   const xmlCount = sources.reduce((n, s) => n + s.entries.length, 0)
 
   const blockers: string[] = []
@@ -106,6 +110,50 @@ export default function ProFrotasFilesStep(props: ProFrotasFilesStepProps) {
         </p>
         <DropZone accept=".zip" hint=".zip gerado na validação anterior" multiple onFiles={(files) => props.onXmlFiles(files, 'pendentes')} />
         <FileList items={pendentes.map(sourceItem)} onRemove={props.onRemoveSource} />
+      </section>
+
+      {/* ── Notas para outro CNPJ (ocasional) ───────────────────────────── */}
+      <section className={card}>
+        <label className="flex items-start gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={props.otherCnpjOpen}
+            onChange={(e) => props.onOtherCnpj(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-blue-600"
+          />
+          <span>
+            <span className="text-sm font-bold text-gray-900 dark:text-slate-100">Há notas emitidas para outro CNPJ</span>
+            <span className="ml-2 text-[11px] text-gray-400 dark:text-slate-500">ocasional</span>
+            <span className="block text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+              Quando parte dos abastecimentos da planilha saiu com nota para outro CNPJ (outra empresa do grupo, por exemplo) e essas notas aparecem como não encontradas.
+            </span>
+          </span>
+        </label>
+        {props.otherCnpjOpen && (
+          <div className="mt-4">
+            <p className="text-xs text-gray-500 dark:text-slate-400 mb-3">
+              Envie o ZIP com os XMLs desse CNPJ. Eles entram no confronto só para achar as notas da planilha: o que sobrar não vai para os pendentes, e cada nota casada sai
+              marcada com o CNPJ para o qual foi emitida.
+            </p>
+            <DropZone accept=".zip,.xml" hint=".zip / .xml · até 400 MB" multiple onFiles={(files) => props.onXmlFiles(files, 'outroCnpj')} />
+            <FileList items={outroCnpj.map(sourceItem)} onRemove={props.onRemoveSource} />
+            {props.otherRecipients.length > 0 && (
+              <div className="mt-3 text-xs text-gray-600 dark:text-slate-300">
+                <p className="font-semibold mb-1">Destinatários que entram no confronto:</p>
+                <ul className="space-y-0.5">
+                  {props.otherRecipients.map((r) => (
+                    <li key={r.cnpj}>
+                      <span className="tabular-nums font-medium">{formatCnpj(r.cnpj)}</span> · {r.name} · {r.notes.toLocaleString('pt-BR')} NF-e
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {outroCnpj.length > 0 && props.otherRecipients.length === 0 && (
+              <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">Os XMLs enviados aqui são todos para a própria empresa: não há outro CNPJ a considerar.</p>
+            )}
+          </div>
+        )}
       </section>
 
       {progress && <ProgressBar progress={progress} />}
@@ -223,7 +271,9 @@ export default function ProFrotasFilesStep(props: ProFrotasFilesStepProps) {
 
 function sourceItem(s: LoadedXmlSource) {
   const parts = [`${s.entries.length.toLocaleString('pt-BR')} NF-e`]
-  if (s.others) parts.push(`${s.others} outro(s) documento(s) ignorado(s)`)
+  const cancelled = s.entries.filter((e) => e.note.cancelled).length + s.cancellations.length
+  if (cancelled) parts.push(`${cancelled.toLocaleString('pt-BR')} cancelamento(s)`)
+  if (s.others) parts.push(`${s.others.toLocaleString('pt-BR')} outro(s) evento(s) ou documento(s) ignorado(s)`)
   if (s.errors.length) parts.push(`${s.errors.length} XML(s) ilegível(is)`)
   return {
     id: s.id,

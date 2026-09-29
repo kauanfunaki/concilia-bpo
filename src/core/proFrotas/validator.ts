@@ -1,5 +1,7 @@
-import { formatMoney } from '../bankReconciliation/money'
+import { formatDateBR, formatMoney } from '../bankReconciliation/money'
+import { formatCnpj } from './cnpj'
 import type {
+  CancellationEvent,
   ResultNote,
   SheetLine,
   SheetNote,
@@ -180,13 +182,29 @@ export function prepareSheetNotes(lines: SheetLine[], companyCnpj: string): Prep
 
 interface PreparedXmls {
   candidates: XmlNote[]
+  // Chave → data do cancelamento, juntando todas as cópias da nota e os eventos em arquivo à parte
+  cancelled: Map<string, string | null>
   duplicates: number
   inbound: number
   otherRecipient: number
 }
 
-/** Uma NF-e por chave de acesso; só nota de saída (venda do posto) destinada à empresa */
-export function prepareXmls(xmls: XmlNote[], companyCnpj: string): PreparedXmls {
+/**
+ * Uma NF-e por chave de acesso; só nota de saída (venda do posto) destinada à empresa — ou a um
+ * CNPJ extra, quando parte das notas saiu para outro CNPJ. O cancelamento vale de qualquer cópia:
+ * o ZIP baixado antes do cancelamento traz a nota sem o evento; o baixado depois, com ele.
+ */
+export function prepareXmls(
+  xmls: XmlNote[],
+  companyCnpj: string,
+  extraRecipients: string[] = [],
+  events: CancellationEvent[] = []
+): PreparedXmls {
+  const accepted = new Set([companyCnpj, ...extraRecipients])
+  const cancelled = new Map<string, string | null>()
+  for (const e of events) if (e.key) cancelled.set(e.key, e.date)
+  for (const x of xmls) if (x.key && x.cancelled && !cancelled.get(x.key)) cancelled.set(x.key, x.cancelledAt)
+
   const seen = new Set<string>()
   const candidates: XmlNote[] = []
   let duplicates = 0
@@ -200,19 +218,26 @@ export function prepareXmls(xmls: XmlNote[], companyCnpj: string): PreparedXmls 
     }
     seen.add(id)
     if (xml.type !== 1) inbound++
-    else if (xml.recipientCnpj !== companyCnpj) otherRecipient++
+    else if (!accepted.has(xml.recipientCnpj)) otherRecipient++
     else candidates.push(xml)
   }
-  return { candidates, duplicates, inbound, otherRecipient }
+  return { candidates, cancelled, duplicates, inbound, otherRecipient }
 }
 
 // ── Confronto ────────────────────────────────────────────────────────────────
 
-export function validateProFrotas(lines: SheetLine[], xmls: XmlNote[], settings: ValidationSettings): ValidationResult {
+export function validateProFrotas(
+  lines: SheetLine[],
+  xmls: XmlNote[],
+  settings: ValidationSettings,
+  events: CancellationEvent[] = []
+): ValidationResult {
   const { companyCnpj, periodEnd, maxDays, tolerance } = settings
   const sheet = prepareSheetNotes(lines, companyCnpj)
-  const receita = prepareXmls(xmls, companyCnpj)
+  const receita = prepareXmls(xmls, companyCnpj, settings.extraRecipients, events)
   const within = (a: number, b: number) => Math.abs(a - b) <= tolerance + EPSILON
+  const isCancelled = (x: XmlNote) => x.cancelled || (x.key !== '' && receita.cancelled.has(x.key))
+  const cancelDate = (x: XmlNote) => receita.cancelled.get(x.key) ?? x.cancelledAt
 
   const index = new Map<string, XmlNote[]>()
   for (const xml of receita.candidates) {
@@ -222,23 +247,25 @@ export function validateProFrotas(lines: SheetLine[], xmls: XmlNote[], settings:
   const used = new Set<XmlNote>()
 
   // Mesma nota e posto em mais de um XML (séries diferentes): a série da planilha desempata,
-  // depois o valor
+  // depois a nota não cancelada, depois o valor
   function pick(note: SheetNote): XmlNote | null {
     let options = (index.get(`${note.number}|${note.stationCnpj}`) ?? []).filter((x) => !used.has(x))
     if (options.length > 1 && note.series) {
       const sameSeries = options.filter((x) => Number(x.series) === Number(note.series))
       if (sameSeries.length) options = sameSeries
     }
+    const valid = options.filter((x) => !isCancelled(x))
+    if (valid.length) options = valid
     return options.find((x) => within(x.amount, note.amount)) ?? options[0] ?? null
   }
 
   const results = new Map<string, ResultNote>()
-  const put = (note: SheetNote, partial: Omit<ResultNote, 'id' | 'sheet' | 'days'>) => {
+  const put = (note: SheetNote, partial: Omit<ResultNote, 'id' | 'sheet' | 'days' | 'cancelledAt'> & { cancelledAt?: string | null }) => {
     const days = partial.xml ? daysBetween(note.fuelDate, partial.xml.issueDate) : null
-    results.set(note.id, { id: note.id, sheet: note, days, ...partial })
+    results.set(note.id, { id: note.id, sheet: note, days, cancelledAt: null, ...partial })
   }
 
-  // 1. Grupos: com XML para todas as notas, vale a soma
+  // 1. Grupos: com XML válido para todas as notas, vale a soma
   const groups = new Map<string, SheetNote[]>()
   for (const note of sheet.notes) {
     if (note.groupId) groups.set(note.groupId, [...(groups.get(note.groupId) ?? []), note])
@@ -246,7 +273,7 @@ export function validateProFrotas(lines: SheetLine[], xmls: XmlNote[], settings:
   let groupNumber = 0
   for (const members of groups.values()) {
     const found = members.map(pick)
-    if (found.some((x) => x === null)) continue
+    if (found.some((x) => x === null || isCancelled(x))) continue
     found.forEach((x) => used.add(x!))
     const sheetSum = members.reduce((s, n) => s + n.amount, 0)
     const xmlSum = found.reduce((s, x) => s + x!.amount, 0)
@@ -268,7 +295,7 @@ export function validateProFrotas(lines: SheetLine[], xmls: XmlNote[], settings:
     })
   }
 
-  // 2. Notas avulsas — e as de grupo incompleto, uma a uma
+  // 2. Notas avulsas — e as de grupo incompleto ou com nota cancelada, uma a uma
   for (const note of sheet.notes) {
     if (results.has(note.id)) continue
     const xml = pick(note)
@@ -288,12 +315,27 @@ export function validateProFrotas(lines: SheetLine[], xmls: XmlNote[], settings:
         difference: null,
         days: days === null ? null : Math.max(0, days),
         groupNumber: null,
+        cancelledAt: null,
         note: groupNote,
       })
       continue
     }
     used.add(xml)
     const difference = roundCents(xml.amount - note.amount)
+    if (isCancelled(xml)) {
+      const at = cancelDate(xml)
+      put(note, {
+        category: 'cancelled',
+        xml,
+        sheetAmount: note.amount,
+        xmlAmount: xml.amount,
+        difference,
+        groupNumber: null,
+        cancelledAt: at,
+        note: [`NF-e cancelada${at ? ` em ${formatDateBR(at)}` : ''}`, groupNote].filter(Boolean).join(' · '),
+      })
+      continue
+    }
     const ok = within(xml.amount, note.amount)
     put(note, {
       category: ok ? 'identical' : 'divergent',
@@ -306,19 +348,34 @@ export function validateProFrotas(lines: SheetLine[], xmls: XmlNote[], settings:
     })
   }
 
-  // 3. Emitida mais de `maxDays` dias depois do abastecimento: desconsiderada
   for (const result of results.values()) {
-    if (result.xml && result.days !== null && result.days > maxDays) {
+    // 3. Emitida mais de `maxDays` dias depois do abastecimento: desconsiderada
+    if (result.xml && result.category !== 'cancelled' && result.days !== null && result.days > maxDays) {
       result.category = 'disregarded'
       result.note = `Emitida ${result.days} dias depois do abastecimento`
     }
+    // Nota que saiu para outro CNPJ: a planilha e o relatório precisam dizer isso
+    if (result.xml && result.xml.recipientCnpj !== companyCnpj) {
+      result.note = [result.note, `Emitida para outro CNPJ: ${formatCnpj(result.xml.recipientCnpj)}`].filter(Boolean).join(' · ')
+    }
   }
 
-  // 4. XML sem par na planilha: segue para o próximo período até passar do prazo
+  // 4. XML sem par na planilha: segue para o próximo período até passar do prazo — menos a nota
+  // cancelada, que não vale nunca, e a do outro CNPJ, que só entrou para achar as notas desta planilha
   const pending: XmlNote[] = []
   const expired: XmlNote[] = []
+  let xmlCancelled = 0
+  let xmlOtherCnpjUnused = 0
   for (const xml of receita.candidates) {
     if (used.has(xml)) continue
+    if (isCancelled(xml)) {
+      xmlCancelled++
+      continue
+    }
+    if (xml.recipientCnpj !== companyCnpj) {
+      xmlOtherCnpjUnused++
+      continue
+    }
     const age = daysBetween(xml.issueDate, periodEnd)
     if (age !== null && age > maxDays) expired.push(xml)
     else pending.push(xml)
@@ -335,11 +392,13 @@ export function validateProFrotas(lines: SheetLine[], xmls: XmlNote[], settings:
     xmlDuplicates: receita.duplicates,
     xmlInbound: receita.inbound,
     xmlOtherRecipient: receita.otherRecipient,
+    xmlCancelled,
+    xmlOtherCnpjUnused,
   }
 
   const companyName =
     lines.find((l) => l.companyCnpj === companyCnpj && l.companyName)?.companyName ??
-    receita.candidates[0]?.recipientName ??
+    receita.candidates.find((x) => x.recipientCnpj === companyCnpj)?.recipientName ??
     ''
 
   return { settings, companyName, notes: [...results.values()], pending, expired, stats }

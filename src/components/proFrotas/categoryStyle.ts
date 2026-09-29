@@ -17,6 +17,11 @@ export const CATEGORY_STYLE: Record<Category, { pill: string; dot: string; card:
     dot: 'bg-amber-500',
     card: 'border-amber-300 dark:border-amber-500/40',
   },
+  cancelled: {
+    pill: 'bg-fuchsia-100 dark:bg-fuchsia-500/20 text-fuchsia-900 dark:text-fuchsia-200 border-fuchsia-300 dark:border-fuchsia-500/40',
+    dot: 'bg-fuchsia-500',
+    card: 'border-fuchsia-300 dark:border-fuchsia-500/40',
+  },
   notFound: {
     pill: 'bg-red-100 dark:bg-red-500/20 text-red-800 dark:text-red-300 border-red-300 dark:border-red-500/40',
     dot: 'bg-red-500',

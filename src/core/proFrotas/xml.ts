@@ -1,17 +1,26 @@
 import { normalizeCnpj } from './cnpj'
-import type { XmlItem, XmlNote } from '../../types/proFrotas'
+import type { CancellationEvent, XmlItem, XmlNote } from '../../types/proFrotas'
 
 /**
  * Leitura do XML de NF-e como vem do portal DF-e da Receita do PR: a NF-e dentro de
  * NFeLog/procNFe, mas também nfeProc ou NFe solta. Tags achadas pelo nome local,
  * com ou sem namespace.
+ *
+ * Cancelamento: o NFeLog do portal do PR traz os eventos da nota no mesmo arquivo; outros portais
+ * mandam cada evento num procEventoNFe à parte. O app antigo não lia nenhum dos dois — em set/2025
+ * a nota 45590, dada como divergente, estava cancelada.
  */
 
 export type XmlReadResult =
   | { kind: 'nfe'; note: XmlNote }
-  // XML legível que não é NF-e (evento, CT-e...): fica de fora sem ser erro
+  | { kind: 'cancellation'; event: CancellationEvent }
+  // XML legível que não é NF-e nem cancelamento (ciência da operação, CT-e...): fica de fora sem ser erro
   | { kind: 'other' }
   | { kind: 'error'; message: string }
+
+// Evento de cancelamento e os status em que ele vale: 135 registrado e vinculado, 155 fora do prazo
+const CANCELLATION = '110111'
+const CANCELLATION_OK = ['135', '155']
 
 /** Bytes → texto, respeitando o encoding declarado (o padrão da NF-e é UTF-8) */
 export function decodeXml(bytes: Uint8Array): string {
@@ -49,6 +58,14 @@ function accessKey(infNFe: Element, doc: Document, fileName: string): string {
   return fileName.match(/\d{44}/)?.[0] ?? ''
 }
 
+/** Cancelamentos homologados do arquivo, lidos da resposta da SEFAZ (retEvento) */
+function cancellations(doc: Document): CancellationEvent[] {
+  return Array.from(doc.getElementsByTagNameNS('*', 'retEvento'))
+    .map((ret) => first(ret, 'infEvento'))
+    .filter((inf) => text(inf, 'tpEvento') === CANCELLATION && CANCELLATION_OK.includes(text(inf, 'cStat')))
+    .map((inf) => ({ key: text(inf, 'chNFe').replace(/\D/g, ''), date: isoDay(text(inf, 'dhRegEvento')) }))
+}
+
 export function parseNfeXml(content: string, fileName: string): XmlReadResult {
   let doc: Document
   try {
@@ -58,8 +75,9 @@ export function parseNfeXml(content: string, fileName: string): XmlReadResult {
   }
   if (doc.getElementsByTagName('parsererror').length > 0) return { kind: 'error', message: 'XML ilegível' }
 
+  const events = cancellations(doc)
   const infNFe = first(doc, 'infNFe')
-  if (!infNFe) return { kind: 'other' }
+  if (!infNFe) return events.length ? { kind: 'cancellation', event: events[0] } : { kind: 'other' }
 
   const ide = first(infNFe, 'ide')
   const emit = first(infNFe, 'emit')
@@ -80,10 +98,11 @@ export function parseNfeXml(content: string, fileName: string): XmlReadResult {
     }
   })
 
+  const key = accessKey(infNFe, doc, fileName)
   return {
     kind: 'nfe',
     note: {
-      key: accessKey(infNFe, doc, fileName),
+      key,
       number: numberText,
       series: text(ide, 'serie'),
       type: Number(text(ide, 'tpNF') || 0),
@@ -95,6 +114,8 @@ export function parseNfeXml(content: string, fileName: string): XmlReadResult {
       amount,
       fileName,
       items,
+      cancelled: events.some((e) => e.key === key),
+      cancelledAt: events.find((e) => e.key === key)?.date ?? null,
     },
   }
 }
