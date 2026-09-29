@@ -19,6 +19,7 @@ function line(noteText: string, amount: number | null, overrides: Partial<SheetL
     companyName: 'Transportadora Exemplo Ltda',
     fuelDate: '2026-09-10',
     amount,
+    postponed: false,
     ...overrides,
   }
 }
@@ -104,6 +105,17 @@ describe('prepareSheetNotes', () => {
     expect(notes.map((n) => [n.number, n.amount])).toEqual([['84', 150], ['85', 50]])
     expect(notes[0].groupId).toBeTruthy()
     expect(notes[1].groupId).toBe(notes[0].groupId)
+  })
+
+  it('ponto e vírgula também separa as notas da linha', () => {
+    const { notes } = prepareSheetNotes([line('NFe210; NFe211', 90)], EMPRESA)
+    expect(notes.map((n) => [n.number, n.amount])).toEqual([['210', 90], ['211', 0]])
+  })
+
+  it('Postergado = Sim fica de fora, mesmo com nota e valor', () => {
+    const result = prepareSheetNotes([line('NFe220', 50, { postponed: true }), line('NFe220', 30), line('NFe221', 10, { postponed: true })], EMPRESA)
+    expect(result.postponed).toBe(2)
+    expect(result.notes).toEqual([expect.objectContaining({ number: '220', amount: 30 })])
   })
 
   it('conta o que ficou de fora: outra empresa, sem nota e sem valor', () => {

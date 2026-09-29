@@ -1,4 +1,6 @@
 import type ExcelJS from 'exceljs'
+import { formatCnpj } from './cnpj'
+import { columnLetter } from './sheet'
 import type { Category, ResultNote, SheetSource, ValidationResult } from '../../types/proFrotas'
 
 /**
@@ -36,12 +38,6 @@ interface SheetSpec {
   name: string
   title: string
   columns: Column[]
-}
-
-export function formatCnpj(digits: string): string {
-  return digits.length === 14
-    ? `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`
-    : digits
 }
 
 /** "linhas 257, 260, 264 (+3)" — com o nome do arquivo quando houver mais de uma planilha */
@@ -119,16 +115,6 @@ export function sortForReport(notes: ResultNote[], category: Category): ResultNo
   return notes
     .filter((n) => n.category === category)
     .sort((a, b) => (a.groupNumber ?? 0) - (b.groupNumber ?? 0) || Number(a.sheet.number) - Number(b.sheet.number) || a.sheet.stationCnpj.localeCompare(b.sheet.stationCnpj))
-}
-
-function columnLetter(index: number): string {
-  let n = index + 1
-  let s = ''
-  while (n > 0) {
-    s = String.fromCharCode(65 + ((n - 1) % 26)) + s
-    n = Math.floor((n - 1) / 26)
-  }
-  return s
 }
 
 export async function buildProFrotasWorkbook(result: ValidationResult): Promise<ExcelJS.Workbook> {

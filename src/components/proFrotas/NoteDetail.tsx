@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { CATEGORY_STYLE } from './categoryStyle'
-import { formatCnpj, formatSources } from '../../core/proFrotas/report'
+import { formatCnpj } from '../../core/proFrotas/cnpj'
+import { formatSources } from '../../core/proFrotas/report'
 import { formatDateBR, formatMoney } from '../../core/bankReconciliation/money'
 import { CATEGORY_LABEL } from '../../types/proFrotas'
 import type { ResultNote, ValidationResult } from '../../types/proFrotas'
@@ -20,6 +21,7 @@ export default function NoteDetail({ note, result, onClose }: NoteDetailProps) {
   }, [onClose])
 
   const { sheet, xml } = note
+  const convertedFrom = result.settings.cnpjConversions?.find((c) => c.to === sheet.companyCnpj)?.from
   const members = sheet.groupId ? result.notes.filter((n) => n.sheet.groupId === sheet.groupId) : []
   const multipleFiles = new Set(result.notes.flatMap((n) => n.sheet.sources.map((s) => s.file))).size > 1
 
@@ -53,6 +55,10 @@ export default function NoteDetail({ note, result, onClose }: NoteDetailProps) {
             <dl className="text-sm space-y-1">
               <Row label="Posto" value={sheet.stationName || '—'} />
               <Row label="CNPJ do posto" value={formatCnpj(sheet.stationCnpj)} />
+              <Row
+                label="CNPJ da empresa"
+                value={`${formatCnpj(sheet.companyCnpj)}${convertedFrom ? ` (na planilha: ${formatCnpj(convertedFrom)})` : ''}`}
+              />
               <Row label="Abastecimento" value={sheet.fuelDate ? formatDateBR(sheet.fuelDate) : '—'} />
               <Row label="Série" value={sheet.series || '—'} />
               <Row label="Valor no boleto" value={formatMoney(note.sheetAmount)} strong />

@@ -20,6 +20,8 @@ export interface SheetLine {
   companyName: string
   fuelDate: string | null
   amount: number | null
+  // Coluna Postergado = Sim: o lançamento veio de outro período e não entra no cálculo
+  postponed: boolean
 }
 
 /** Nota da planilha já tratada: uma por (nº da nota, CNPJ do posto) */
@@ -89,16 +91,25 @@ export interface ResultNote {
   note: string
 }
 
+export interface CnpjConversion {
+  // CNPJ da Empresa como está na planilha → CNPJ destinatário das notas
+  from: string
+  to: string
+}
+
 export interface ValidationSettings {
   companyCnpj: string
   periodEnd: string
   maxDays: number
   tolerance: number
+  // Só para registro: as linhas da planilha já chegam convertidas ao motor
+  cnpjConversions?: CnpjConversion[]
 }
 
 export interface ValidationStats {
   sheetLines: number
   sheetOtherCompany: number
+  sheetPostponed: number
   sheetWithoutNote: number
   // Sem CNPJ da empresa, sem CNPJ do posto ou sem valor
   sheetIncomplete: number

@@ -3,7 +3,8 @@ import NoteDetail from './NoteDetail'
 import { CATEGORY_STYLE } from './categoryStyle'
 import type { LoadedXmlSource } from './ProFrotasValidation'
 import { zipXmlFiles } from '../../core/proFrotas/archive'
-import { downloadBlob, downloadProFrotasReport, formatCnpj, zipFileName } from '../../core/proFrotas/report'
+import { formatCnpj } from '../../core/proFrotas/cnpj'
+import { downloadBlob, downloadProFrotasReport, zipFileName } from '../../core/proFrotas/report'
 import { formatDateBR, formatMoney } from '../../core/bankReconciliation/money'
 import { CATEGORY_LABEL } from '../../types/proFrotas'
 import type { Category, ResultNote, ValidationResult, XmlNote } from '../../types/proFrotas'
@@ -98,6 +99,11 @@ export default function ProFrotasResultStep({ result, sources, onBack, onReset }
           <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
             {result.companyName || 'Empresa'} · {formatCnpj(settings.companyCnpj)} · prazo de {settings.maxDays} dias · tolerância de {formatMoney(settings.tolerance)}
           </p>
+          {settings.cnpjConversions?.map((c) => (
+            <p key={c.from} className="text-xs font-medium text-violet-700 dark:text-violet-300 mt-0.5">
+              CNPJ da Empresa na planilha ({formatCnpj(c.from)}) convertido para {formatCnpj(c.to)}
+            </p>
+          ))}
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={onBack} className={secondaryButton}>← Arquivos</button>
@@ -198,6 +204,7 @@ export default function ProFrotasResultStep({ result, sources, onBack, onReset }
           <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">O que ficou de fora</p>
           <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
             <Stat label="Lançamentos lidos da planilha" value={stats.sheetLines} />
+            <Stat label="Postergado = Sim" value={stats.sheetPostponed} muted />
             <Stat label="Sem número de nota (“-” ou estorno)" value={stats.sheetWithoutNote} muted />
             <Stat label="Sem valor no boleto ou sem CNPJ" value={stats.sheetIncomplete} muted />
             <Stat label="De outra empresa" value={stats.sheetOtherCompany} muted />

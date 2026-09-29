@@ -83,6 +83,7 @@ export function suggestPeriodEnd(lines: SheetLine[], companyCnpj: string): strin
 interface PreparedSheet {
   notes: SheetNote[]
   otherCompany: number
+  postponed: number
   withoutNote: number
   incomplete: number
 }
@@ -94,6 +95,7 @@ interface PreparedSheet {
  */
 export function prepareSheetNotes(lines: SheetLine[], companyCnpj: string): PreparedSheet {
   let otherCompany = 0
+  let postponed = 0
   let withoutNote = 0
   let incomplete = 0
   let groupSeq = 0
@@ -117,13 +119,19 @@ export function prepareSheetNotes(lines: SheetLine[], companyCnpj: string): Prep
       else incomplete++
       continue
     }
+    // Postergado = Sim: veio de outro período e não entra no cálculo. O app antigo tinha a coluna na
+    // configuração mas nunca a lia — na planilha de set/2025 essas linhas saíam só por virem com valor zero
+    if (line.postponed) {
+      postponed++
+      continue
+    }
     // Como no antigo: sem CNPJ do posto ou sem valor (inclusive zero), a linha não entra
     if (!line.stationCnpj || !line.amount) {
       incomplete++
       continue
     }
 
-    const tokens = line.noteText.split(',').map((t) => t.trim()).filter(Boolean)
+    const tokens = line.noteText.split(/[,;]/).map((t) => t.trim()).filter(Boolean)
     const numbers = tokens.map(noteNumber).filter((n): n is string => n !== null)
     if (numbers.length === 0) {
       withoutNote++
@@ -165,7 +173,7 @@ export function prepareSheetNotes(lines: SheetLine[], companyCnpj: string): Prep
   for (const n of notes) if (n.groupId) members.set(n.groupId, (members.get(n.groupId) ?? 0) + 1)
   for (const n of notes) if (n.groupId && members.get(n.groupId) === 1) n.groupId = null
 
-  return { notes, otherCompany, withoutNote, incomplete }
+  return { notes, otherCompany, postponed, withoutNote, incomplete }
 }
 
 // ── XMLs ─────────────────────────────────────────────────────────────────────
@@ -319,6 +327,7 @@ export function validateProFrotas(lines: SheetLine[], xmls: XmlNote[], settings:
   const stats: ValidationStats = {
     sheetLines: lines.length,
     sheetOtherCompany: sheet.otherCompany,
+    sheetPostponed: sheet.postponed,
     sheetWithoutNote: sheet.withoutNote,
     sheetIncomplete: sheet.incomplete,
     sheetNotes: sheet.notes.length,
