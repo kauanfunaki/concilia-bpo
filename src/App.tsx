@@ -2,6 +2,7 @@ import { useReducer, useState } from 'react'
 import Uploader from './components/Uploader'
 import BankReconciliation from './components/bank/BankReconciliation'
 import ProFrotasValidation from './components/proFrotas/ProFrotasValidation'
+import SispagReconciliation from './components/sispag/SispagReconciliation'
 import ThemeToggle from './components/ThemeToggle'
 import SheetConfig from './components/SheetConfig'
 import ReportTable from './components/ReportTable'
@@ -52,12 +53,13 @@ function reducer(state: AppState, action: Action): AppState {
   }
 }
 
-type AppMode = 'bases' | 'bank' | 'profrotas'
+type AppMode = 'bases' | 'bank' | 'profrotas' | 'sispag'
 
 const MODES: [AppMode, string, string][] = [
   ['bases', 'Bases Excel', 'Conciliação de Bases Excel'],
   ['bank', 'Bancária', 'Conciliação bancária: sistema × extrato'],
   ['profrotas', 'Pro Frotas', 'Validação Pro Frotas: planilha × XMLs da Receita'],
+  ['sispag', 'SISPAG', 'Conferência SISPAG: extrato Itaú × relatório de pagamentos'],
 ]
 
 const MODE_STORAGE_KEY = 'conciliador-bpo:modo'
@@ -143,6 +145,10 @@ export default function App() {
 
       <main hidden={mode !== 'profrotas'} className="max-w-7xl mx-auto px-6 py-10">
         <ProFrotasValidation />
+      </main>
+
+      <main hidden={mode !== 'sispag'} className="max-w-7xl mx-auto px-6 py-10">
+        <SispagReconciliation />
       </main>
 
       <main hidden={mode !== 'bases'} className="max-w-5xl mx-auto px-6 py-10">
