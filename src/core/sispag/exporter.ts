@@ -2,7 +2,7 @@ import type ExcelJS from 'exceljs'
 import { columnLetter } from '../proFrotas/sheet'
 import { downloadBlob } from '../proFrotas/report'
 import { formatPeriod } from '../bankReconciliation/money'
-import { indexResult, itemMovements, itemPayments, statementLabel } from './view'
+import { indexResult, itemMovements, itemPayments, paymentItems, statementLabel } from './view'
 import type { ResultIndex } from './view'
 import { DIVERGENT, RULE_LABEL, SITUATION_LABEL, SITUATIONS } from '../../types/sispag'
 import type { ItauMovement, ResultItem, Situation, SispagPayment, SispagResult } from '../../types/sispag'
@@ -214,12 +214,18 @@ function addSummarySheet(workbook: ExcelJS.Workbook, result: SispagResult): void
 
 // ── Pagamentos, extrato e o que conferir ────────────────────────────────────
 
+/**
+ * O pagamento devolvido aparece no débito de onde saiu e, à parte, na devolução: filtrar a aba
+ * pelo lote traz todos os pagamentos dele e o total bate com a linha do extrato.
+ */
 interface PaymentRow {
   payment: SispagPayment
   situation: Situation
-  // Item que casou o débito (ou a devolução, para o não efetuado)
+  // Item da situação do pagamento, que dá a observação
   item: ResultItem | null
-  lines: ItauMovement[]
+  debit: ResultItem | null
+  debitLines: ItauMovement[]
+  refundLines: ItauMovement[]
 }
 
 function paymentRows(result: SispagResult, index: ResultIndex): PaymentRow[] {
@@ -229,18 +235,25 @@ function paymentRows(result: SispagResult, index: ResultIndex): PaymentRow[] {
     .sort((a, b) => a.date.localeCompare(b.date) || a.row - b.row)
     .map((payment) => {
       const situation = result.paymentSituation[payment.id] ?? 'notDone'
-      const items = index.itemsOfPayment.get(payment.id) ?? []
-      const item = items.find((i) => i.situation === situation) ?? items[0] ?? null
-      return { payment, situation, item, lines: item ? itemMovements(item, index) : [] }
+      const { debit, refund } = paymentItems(payment.id, index)
+      const item = refund && refund.situation === situation ? refund : (debit ?? refund)
+      return {
+        payment,
+        situation,
+        item,
+        debit,
+        debitLines: debit ? itemMovements(debit, index) : [],
+        refundLines: refund ? itemMovements(refund, index) : [],
+      }
     })
 }
 
 function linesLabel(row: PaymentRow): string | null {
-  if (row.lines.length === 0) return null
-  const first = row.lines[0].description
-  const shared = row.item ? row.item.paymentIds.length : 1
-  if (row.lines.length > 1) return `${row.lines.length} linhas (${first}…)`
-  return shared > 1 ? `${first} (lote de ${shared})` : first
+  const { debit, debitLines: lines } = row
+  if (!debit || lines.length === 0) return null
+  const first = lines[0].description
+  if (lines.length > 1) return `${lines.length} linhas (${first}…)`
+  return debit.paymentIds.length > 1 ? `${first} (lote de ${debit.paymentIds.length})` : first
 }
 
 const PAYMENT_COLUMNS: Column<PaymentRow>[] = [
@@ -253,10 +266,12 @@ const PAYMENT_COLUMNS: Column<PaymentRow>[] = [
   { header: 'Valor', width: 15, kind: 'money', sum: true, value: (r) => r.payment.amount },
   { header: 'Status SISPAG', width: 14, kind: 'text', value: (r) => r.payment.status || null },
   { header: 'Conferência', width: 20, kind: 'text', value: (r) => SITUATION_LABEL[r.situation] },
-  { header: 'Data no Extrato', width: 13, kind: 'date', value: (r) => isoToDate(r.lines[0]?.date) },
+  { header: 'Data no Extrato', width: 13, kind: 'date', value: (r) => isoToDate(r.debitLines[0]?.date) },
   { header: 'Lançamento no Extrato', width: 38, kind: 'text', value: linesLabel },
-  { header: 'Valor no Extrato', width: 15, kind: 'money', value: (r) => (r.item && r.lines.length ? r.item.statementAmount : null) },
-  { header: 'Regra', width: 14, kind: 'text', value: (r) => (r.item && r.item.rule !== 'none' ? RULE_LABEL[r.item.rule] : null) },
+  { header: 'Valor no Extrato', width: 15, kind: 'money', value: (r) => (r.debit && r.debitLines.length ? r.debit.statementAmount : null) },
+  { header: 'Regra', width: 14, kind: 'text', value: (r) => (r.debit && r.debit.rule !== 'none' ? RULE_LABEL[r.debit.rule] : null) },
+  { header: 'Devolução no Extrato', width: 13, kind: 'date', value: (r) => isoToDate(r.refundLines[0]?.date) },
+  { header: 'Lançamento da Devolução', width: 30, kind: 'text', value: (r) => r.refundLines[0]?.description ?? null },
   { header: 'Observação', width: 50, kind: 'text', value: (r) => r.item?.note || null },
 ]
 

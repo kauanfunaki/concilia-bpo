@@ -69,22 +69,32 @@ describe('buildSispagWorkbook', () => {
     expect(workbook.worksheets.map((ws) => ws.name)).toEqual(['Resumo', 'Para conferir', 'Pagamentos SISPAG', 'Extrato SISPAG'])
   })
 
-  it('cada pagamento do relatório sai com a situação e a linha do extrato', async () => {
+  it('cada pagamento do relatório sai com a situação, o débito e a devolução no extrato', async () => {
     const ws = (await roundTrip()).getWorksheet('Pagamentos SISPAG')!
     const rows = [3, 4, 5, 6].map((r) => ({
       payee: ws.getCell(r, column(ws, 'Favorecido')).value,
       situation: ws.getCell(r, column(ws, 'Conferência')).value,
       line: ws.getCell(r, column(ws, 'Lançamento no Extrato')).value,
+      refund: ws.getCell(r, column(ws, 'Lançamento da Devolução')).value,
     }))
     expect(rows).toEqual([
-      { payee: 'ALFA', situation: 'Conciliado', line: 'Sispag Fornecedores TED (lote de 3)' },
-      { payee: 'BETA', situation: 'Conciliado', line: 'Sispag Fornecedores TED (lote de 3)' },
-      { payee: 'GAMA', situation: 'Devolvido', line: 'Dev TED 078952 MOT02' },
-      { payee: 'DELTA', situation: 'Só no SISPAG', line: null },
+      { payee: 'ALFA', situation: 'Conciliado', line: 'Sispag Fornecedores TED (lote de 3)', refund: null },
+      { payee: 'BETA', situation: 'Conciliado', line: 'Sispag Fornecedores TED (lote de 3)', refund: null },
+      { payee: 'GAMA', situation: 'Devolvido', line: 'Sispag Fornecedores TED (lote de 3)', refund: 'Dev TED 078952 MOT02' },
+      { payee: 'DELTA', situation: 'Só no SISPAG', line: null, refund: null },
     ])
     // Linha de totais com SUBTOTAL, que acompanha o filtro
     const total = ws.getCell(7, column(ws, 'Valor')).value as { formula: string }
     expect(total.formula).toMatch(/^SUBTOTAL\(109,/)
+  })
+
+  it('filtrar pelo lote traz também o pagamento devolvido, e a soma bate com a linha do extrato', async () => {
+    const ws = (await roundTrip()).getWorksheet('Pagamentos SISPAG')!
+    const batch = [3, 4, 5, 6].filter((r) => ws.getCell(r, column(ws, 'Valor no Extrato')).value === 1500)
+    expect(batch.map((r) => ws.getCell(r, column(ws, 'Favorecido')).value)).toEqual(['ALFA', 'BETA', 'GAMA'])
+    expect(batch.reduce((s, r) => s + Number(ws.getCell(r, column(ws, 'Valor')).value), 0)).toBe(1500)
+    expect(ws.getCell(5, column(ws, 'Regra')).value).toBe('Lote')
+    expect((ws.getCell(5, column(ws, 'Devolução no Extrato')).value as Date).toISOString().slice(0, 10)).toBe('2025-03-05')
   })
 
   it('"Para conferir" traz as divergências com observação', async () => {
