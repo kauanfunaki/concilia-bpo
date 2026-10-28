@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { usedRange } from '../bankReconciliation/fileReaders'
 import { formatDateBR, formatMoney, parseDate, parseMoney } from '../bankReconciliation/money'
 import { cellText, normalizeText } from '../bankReconciliation/text'
 import { formatCnpj, normalizeCnpj } from './cnpj'
@@ -71,28 +72,6 @@ export interface SheetColumn {
 // O título costuma estar na 1ª linha; a busca vai um pouco além por segurança
 const HEADER_SEARCH_ROWS = 15
 const SAMPLE_ROWS = 300
-
-/**
- * Intervalo das células que existem de fato. Há exportador que grava um tamanho de aba menor que o
- * dos dados (o extrato do Itaú diz A1:F13 com 4.769 linhas), e o SheetJS só lê o tamanho gravado.
- */
-function usedRange(sheet: XLSX.WorkSheet): XLSX.Range | null {
-  const ref = sheet['!ref']
-  let range = ref ? XLSX.utils.decode_range(ref) : null
-  for (const key of Object.keys(sheet)) {
-    if (key.startsWith('!')) continue
-    const { r, c } = XLSX.utils.decode_cell(key)
-    if (!range) {
-      range = { s: { r, c }, e: { r, c } }
-      continue
-    }
-    range.s.r = Math.min(range.s.r, r)
-    range.s.c = Math.min(range.s.c, c)
-    range.e.r = Math.max(range.e.r, r)
-    range.e.c = Math.max(range.e.c, c)
-  }
-  return range
-}
 
 /** Todas as abas com as linhas em branco preservadas: o índice vira a linha do Excel */
 export function readProFrotasWorkbook(data: ArrayBuffer | Uint8Array): ProFrotasSheet[] {
