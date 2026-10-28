@@ -3,6 +3,7 @@ import type { PdfLine, PdfTextItem } from '../bankReconciliation/statementPdf'
 import { formatDateBR, formatMoney, parseMoney, roundCents } from '../bankReconciliation/money'
 import { normalizeText } from '../bankReconciliation/text'
 import { classifyMovement, splitCounterparty } from './classify'
+import { parseLancamentosPdf } from './itauLancamentos'
 import type { ItauMovement, ItauStatement } from '../../types/sispag'
 
 /**
@@ -18,6 +19,9 @@ import type { ItauMovement, ItauStatement } from '../../types/sispag'
  * quadro-resumo da página 1, e os movimentos de cada dia têm que levar um saldo impresso ao
  * seguinte. O "Saldo anterior" não serve de ponto de partida: soma a aplicação automática, e os
  * saldos do dia são só da conta corrente.
+ *
+ * O outro PDF do Itaú, os "Lançamentos do período" do Itaú Empresas, tem leitura própria
+ * (itauLancamentos.ts); fora dos dois layouts, vale a leitura genérica do app.
  */
 
 interface Cell {
@@ -101,7 +105,7 @@ function pad(n: number): string {
 export function parseItauPdf(items: PdfTextItem[], fileName: string): ItauStatement {
   const lines = groupTextLines(items)
   const header = headerOf(lines)
-  if (!lines.some((l) => layoutOf(cellsOf(l)))) return genericFallback(lines, fileName, header)
+  if (!lines.some((l) => layoutOf(cellsOf(l)))) return parseLancamentosPdf(items, fileName) ?? genericFallback(lines, fileName, header)
 
   const movements: ItauMovement[] = []
   const warnings: string[] = []
@@ -282,7 +286,7 @@ function balanceCheck(movements: ItauMovement[], closing: number | null): string
   return warnings
 }
 
-/** PDF fora do layout do extrato mensal: leitura genérica do app, com aviso */
+/** PDF fora dos layouts do Itaú: leitura genérica do app, com aviso */
 function genericFallback(lines: PdfLine[], fileName: string, header: Header | null): ItauStatement {
   const generic = parseStatementPdfLines(lines, fileName, header?.year)
   const movements: ItauMovement[] = generic.movements.map((m) => {
@@ -300,6 +304,9 @@ function genericFallback(lines: PdfLine[], fileName: string, header: Header | nu
     openingBalance: generic.balances[0]?.balance ?? null,
     closingBalance: generic.balances[generic.balances.length - 1]?.balance ?? null,
     movements,
-    warnings: ['O PDF não está no layout do "extrato mensal" do Itaú: a leitura foi genérica. Confira as linhas lidas.', ...generic.warnings],
+    warnings: [
+      'O PDF não está no layout do "extrato mensal" nem no dos "Lançamentos do período" do Itaú: a leitura foi genérica. Confira as linhas lidas.',
+      ...generic.warnings,
+    ],
   }
 }

@@ -205,6 +205,18 @@ describe('reconcileSispag', () => {
     ])
   })
 
+  it('no extrato detalhado, o CPF/CNPJ casa antes do lote: TED e PIX de mesmo valor não trocam de favorecido', () => {
+    // Pelo lote, o PIX (fornecedores) ficaria com a primeira linha, fosse de quem fosse
+    const joao = mov('2025-03-14', 'PAGAMENTOS A FORNECEDORES JOAO DA SILVA 123.456.789-09', -1120)
+    const maria = mov('2025-03-14', 'PAGAMENTOS A FORNECEDORES MARIA SOUZA 987.654.321-00', -1120)
+    const pMaria = pay('2025-03-14', 1120, 'PIX Transferências', 'Efetuado', 'MARIA SOUZA', '987.654.321-00')
+    const pJoao = pay('2025-03-14', 1120, 'TED outro titular', 'Efetuado', 'JOAO DA SILVA', '123.456.789-09')
+    expect(summary(run([joao, maria], [pMaria, pJoao]))).toEqual([
+      ['matched', 'value', [joao.id], [pJoao.id]],
+      ['matched', 'value', [maria.id], [pMaria.id]],
+    ])
+  })
+
   it('mesmo valor em outra data (até 5 dias) casa como "outra data"', () => {
     const linha = mov('2025-03-17', 'Sispag Fornecedores', -410)
     const outra = mov('2025-03-14', 'Sispag Fornecedores', -1)

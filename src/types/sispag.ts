@@ -76,7 +76,7 @@ export interface ItauMovement {
 
 export interface ItauStatement {
   fileName: string
-  source: 'pdf' | 'ofx'
+  source: 'pdf' | 'ofx' | 'excel'
   account: string
   company: string
   period: Period | null
