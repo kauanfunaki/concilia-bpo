@@ -72,6 +72,28 @@ export interface SheetColumn {
 const HEADER_SEARCH_ROWS = 15
 const SAMPLE_ROWS = 300
 
+/**
+ * Intervalo das células que existem de fato. Há exportador que grava um tamanho de aba menor que o
+ * dos dados (o extrato do Itaú diz A1:F13 com 4.769 linhas), e o SheetJS só lê o tamanho gravado.
+ */
+function usedRange(sheet: XLSX.WorkSheet): XLSX.Range | null {
+  const ref = sheet['!ref']
+  let range = ref ? XLSX.utils.decode_range(ref) : null
+  for (const key of Object.keys(sheet)) {
+    if (key.startsWith('!')) continue
+    const { r, c } = XLSX.utils.decode_cell(key)
+    if (!range) {
+      range = { s: { r, c }, e: { r, c } }
+      continue
+    }
+    range.s.r = Math.min(range.s.r, r)
+    range.s.c = Math.min(range.s.c, c)
+    range.e.r = Math.max(range.e.r, r)
+    range.e.c = Math.max(range.e.c, c)
+  }
+  return range
+}
+
 /** Todas as abas com as linhas em branco preservadas: o índice vira a linha do Excel */
 export function readProFrotasWorkbook(data: ArrayBuffer | Uint8Array): ProFrotasSheet[] {
   let workbook: XLSX.WorkBook
@@ -82,11 +104,11 @@ export function readProFrotasWorkbook(data: ArrayBuffer | Uint8Array): ProFrotas
   }
   return (workbook.SheetNames ?? []).map((sheetName) => {
     const sheet = workbook.Sheets[sheetName]
-    const ref = sheet['!ref']
-    const range = ref ? XLSX.utils.decode_range(ref) : null
+    const range = usedRange(sheet)
+    if (range) sheet['!ref'] = XLSX.utils.encode_range(range)
     return {
       sheetName,
-      rows: ref ? XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: null, blankrows: true }) : [],
+      rows: range ? XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: null, blankrows: true }) : [],
       firstRow: range ? range.s.r + 1 : 1,
       firstCol: range ? range.s.c : 0,
     }

@@ -149,4 +149,18 @@ describe('readProFrotasWorkbook', () => {
     const [line] = parseProFrotasSheets(readProFrotasWorkbook(data), 'x.xlsx')
     expect(line.source.row).toBe(3)
   })
+
+  it('lê a aba inteira quando o arquivo grava um tamanho de aba menor que o dos dados', () => {
+    // O extrato do Itaú em Excel diz A1:F13 numa aba de 4.769 linhas
+    const ws = XLSX.utils.aoa_to_sheet([['Data', 'Valor'], ['01/12/2025', 1], ['02/12/2025', 2], ['03/12/2025', 3]])
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Lançamentos')
+    const zip = XLSX.CFB.read(new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer), { type: 'array' })
+    const entry = zip.FileIndex[zip.FullPaths.findIndex((p: string) => p.endsWith('xl/worksheets/sheet1.xml'))]
+    const xml = new TextDecoder().decode(entry.content as Uint8Array)
+    expect(xml).toContain('<dimension ref="A1:B4"/>')
+    entry.content = new TextEncoder().encode(xml.replace('<dimension ref="A1:B4"/>', '<dimension ref="A1:B2"/>'))
+    const [sheet] = readProFrotasWorkbook(XLSX.CFB.write(zip, { fileType: 'zip', type: 'array' }) as Uint8Array)
+    expect(sheet.rows.map((r) => r[1])).toEqual(['Valor', 1, 2, 3])
+  })
 })

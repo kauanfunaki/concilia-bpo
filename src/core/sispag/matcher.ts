@@ -158,7 +158,8 @@ const PAYMENT_PRIORITY: Situation[] = ['notDone', 'matched', 'returned', 'otherM
  *
  * 1. Devoluções ("Dev TED") e estornos ("Est Sispag") × pagamentos não efetuados de mesmo valor:
  *    o débito saiu e voltou. Esses pagamentos entram junto com os efetuados no confronto dos débitos.
- * 2. No dia: linha do extrato = pagamento de mesmo valor e mesmo lote (TED, tributos…).
+ * 2. No dia: linha do extrato = pagamento de mesmo valor e mesmo CPF/CNPJ, quando o extrato traz o
+ *    documento; depois, de mesmo valor e mesmo lote (TED, tributos…).
  * 3. Linha que é a soma de um lote: todos os pagamentos de um tipo no dia, ou uma combinação deles.
  * 4. Extrato que lista cada TED como "Sispag Fornecedores": repete 2 e 3 aceitando TED nesse lote.
  * 5. Várias linhas de um lote × os pagamentos dele, pelo total; depois, o que sobrou do dia.
@@ -267,6 +268,19 @@ export function reconcileSispag(statement: ItauStatement, report: SispagReport):
     })
   }
 
+  // Extrato com o CPF/CNPJ de cada pagamento (Lançamentos detalhado, OFX): mesmo valor e mesmo
+  // documento casam antes de tudo, para não trocar favorecidos que receberam o mesmo valor no dia
+  const byDocument = (ls: Line[], ps: Pay[]) => {
+    const byCents = groupBy(ps.filter((x) => x.p.document), (x) => x.cents)
+    for (const l of ls) {
+      if (!l.m.document) continue
+      const x = (byCents.get(l.cents) ?? []).find(
+        (c) => freePays.has(c.p.id) && (strict(l, c) || relaxed(l, c)) && documentsMatch(l.m.document, c.p.document)
+      )
+      if (x) link([l], [x], 'value', '')
+    }
+  }
+
   const byValue = (ls: Line[], ps: Pay[], accept: Accept) => {
     const byCents = groupBy(ps, (x) => x.cents)
     // "Sispag Tributos" e "Sispag Fornecedores TED" escolhem antes do lote genérico
@@ -320,6 +334,7 @@ export function reconcileSispag(statement: ItauStatement, report: SispagReport):
     const freeP = () => dayPays.filter((x) => freePays.has(x.p.id))
     const supplierLines = () => freeL().filter((l) => l.family === 'supplier')
 
+    byDocument(freeL(), freeP())
     byValue(freeL(), freeP(), strict)
     byBatch(freeL(), freeP, strict)
     byValue(supplierLines(), freeP(), relaxed)

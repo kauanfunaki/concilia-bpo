@@ -4,6 +4,7 @@ import SispagResultStep from './SispagResultStep'
 import { fileExtension, readAsArrayBuffer } from '../../core/bankReconciliation/fileReaders'
 import { readProFrotasWorkbook } from '../../core/proFrotas/sheet'
 import { parseItauPdf } from '../../core/sispag/itauPdf'
+import { parseLancamentosSheet } from '../../core/sispag/itauLancamentos'
 import { decodeOfx, parseOfx } from '../../core/sispag/ofx'
 import { parseSispagReport } from '../../core/sispag/sispagReport'
 import { reconcileSispag } from '../../core/sispag/matcher'
@@ -31,8 +32,8 @@ export default function SispagReconciliation() {
   async function handleStatementFile(file: File) {
     setStatementError(null)
     const ext = fileExtension(file.name)
-    if (!['.pdf', '.ofx'].includes(ext)) {
-      setStatementError('Formato inválido. Envie o extrato do Itaú em .pdf ou .ofx.')
+    if (!['.pdf', '.ofx', '.xls', '.xlsx'].includes(ext)) {
+      setStatementError('Formato inválido. Envie o extrato do Itaú em .pdf, .ofx ou Excel (.xls / .xlsx).')
       return
     }
     if (file.size > MAX_SIZE_BYTES) {
@@ -47,8 +48,10 @@ export default function SispagReconciliation() {
       if (ext === '.pdf') {
         const { extractPdfItems } = await import('../../core/bankReconciliation/pdfText')
         next = parseItauPdf(await extractPdfItems(buffer), file.name)
-      } else {
+      } else if (ext === '.ofx') {
         next = parseOfx(decodeOfx(new Uint8Array(buffer)), file.name)
+      } else {
+        next = parseLancamentosSheet(readProFrotasWorkbook(buffer), file.name)
       }
       if (!next.movements.some((m) => m.kind !== 'other')) {
         throw new Error('O extrato não tem nenhuma linha do SISPAG ("Sispag …", "Pagamentos a fornecedores", "Dev TED").')

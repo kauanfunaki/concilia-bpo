@@ -63,13 +63,14 @@ export default function SispagFilesStep(props: SispagFilesStepProps) {
       <section className={card}>
         <StepTitle n={1} title="Extrato do Itaú" />
         <p className="text-xs text-gray-500 dark:text-slate-400 mb-4">
-          O "extrato mensal" em PDF (Conta Corrente | Movimentação) ou o OFX. Entram na conferência as linhas do SISPAG — "Sispag Fornecedores", "Sispag
-          Fornecedores TED", "Sispag Tributos", "Pagamentos a fornecedores" — e as devoluções e estornos ("Dev TED", "Est Sispag").
+          O "extrato mensal" em PDF (Conta Corrente | Movimentação), os "Lançamentos do período" do Itaú Empresas em PDF ou Excel — consolidado ou
+          detalhado — ou o OFX. Entram na conferência as linhas do SISPAG — "Sispag Fornecedores", "Sispag Fornecedores TED", "Sispag Tributos",
+          "Pagamentos a fornecedores" — e as devoluções e estornos ("Dev TED", "Est Sispag").
         </p>
         {statement ? (
           <StatementSummary statement={statement} onRemove={props.onRemoveStatement} />
         ) : (
-          <DropZone accept=".pdf,.ofx" hint=".pdf / .ofx · até 30 MB" onFiles={(files) => props.onStatementFile(files[0])} />
+          <DropZone accept=".pdf,.ofx,.xls,.xlsx" hint=".pdf / .ofx / .xlsx · até 30 MB" onFiles={(files) => props.onStatementFile(files[0])} />
         )}
         <ErrorText error={props.statementError} />
       </section>
