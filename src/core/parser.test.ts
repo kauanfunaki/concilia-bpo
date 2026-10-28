@@ -59,6 +59,25 @@ describe('parseFile — unitários', () => {
     const file = new File([buf], 'corrupto.xlsx')
     await expect(parseFile(file)).rejects.toThrow('Não foi possível ler o arquivo')
   })
+
+  it('lê a aba inteira quando o arquivo grava um tamanho de aba menor que o dos dados', async () => {
+    // O extrato do Itaú em Excel diz A1:F13 numa aba de 4.769 linhas
+    const ws = XLSX.utils.aoa_to_sheet([['CNPJ', 'VALOR'], ['111', 10], ['222', 20], ['333', 30]])
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Plan1')
+    const zip = XLSX.CFB.read(new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer), { type: 'array' })
+    const entry = zip.FileIndex[zip.FullPaths.findIndex((p: string) => p.endsWith('xl/worksheets/sheet1.xml'))]
+    const xml = new TextDecoder().decode(entry.content as Uint8Array)
+    expect(xml).toContain('<dimension ref="A1:B4"/>')
+    entry.content = new TextEncoder().encode(xml.replace('<dimension ref="A1:B4"/>', '<dimension ref="A1:A2"/>'))
+    const file = new File([XLSX.CFB.write(zip, { fileType: 'zip', type: 'array' })], 'extrato.xlsx')
+    const result = await parseFile(file)
+    expect(result.rawData['Plan1']).toEqual([
+      { CNPJ: '111', VALOR: 10 },
+      { CNPJ: '222', VALOR: 20 },
+      { CNPJ: '333', VALOR: 30 },
+    ])
+  })
 })
 
 // ────────────────────────────────────────────────

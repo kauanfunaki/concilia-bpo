@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { usedRange } from './bankReconciliation/fileReaders'
 import type { UploadedFile, Row } from '../types'
 
 /**
@@ -33,6 +34,9 @@ export async function parseFile(file: File): Promise<UploadedFile> {
 
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName]
+    // Aba que o SheetJS não conseguiu abrir vem undefined e continua saindo sem linhas
+    const range = sheet ? usedRange(sheet) : null
+    if (range) sheet['!ref'] = XLSX.utils.encode_range(range)
     // defval: null → células vazias viram null
     const rows = XLSX.utils.sheet_to_json<Row>(sheet, { defval: null })
     rawData[sheetName] = rows
